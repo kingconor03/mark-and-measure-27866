@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Info, Shield } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const CreateOrganization = () => {
   const { user, signOut } = useAuth();
@@ -17,6 +18,18 @@ const CreateOrganization = () => {
   const [loading, setLoading] = useState(false);
   const [orgName, setOrgName] = useState("");
   const [domain, setDomain] = useState("");
+  const [checking, setChecking] = useState(false);
+
+  const checkForOrg = async () => {
+    setChecking(true);
+    // Force a refresh by re-fetching user data
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      // This will trigger useOrganisation to re-fetch
+      window.location.reload();
+    }
+    setChecking(false);
+  };
 
   useEffect(() => {
     if (!user) {
@@ -63,33 +76,71 @@ const CreateOrganization = () => {
     );
   }
 
+  // If not platform admin, show contact admin message
+  if (!isPlatformAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Organization Required</CardTitle>
+            <CardDescription>
+              You need to be assigned to an organization to continue
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                You're not currently assigned to an organization. If you just signed up with a BladePile email (@bladepile.com.au), 
+                click "Check Again" below - you may have already been auto-assigned!
+              </AlertDescription>
+            </Alert>
+
+            <Button 
+              onClick={checkForOrg}
+              className="w-full"
+              disabled={checking}
+            >
+              {checking ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Checking...
+                </>
+              ) : (
+                'Check Again'
+              )}
+            </Button>
+
+            <Button 
+              onClick={signOut}
+              variant="outline"
+              className="w-full"
+            >
+              Sign Out
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Platform admin can create new organizations
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Create Your Organization</CardTitle>
+          <CardTitle>Create Organization</CardTitle>
           <CardDescription>
-            Set up your organization to start managing projects
+            Create a new organization (Platform Admin Only)
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isPlatformAdmin && (
-            <Alert>
-              <Shield className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Platform Admin Mode:</strong> You can create an organization with any domain.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {!isPlatformAdmin && (
-            <Alert>
-              <Info className="h-4 w-4" />
-              <AlertDescription>
-                Your organization will be created using your email domain. Team members with the same domain can join automatically.
-              </AlertDescription>
-            </Alert>
-          )}
+          <Alert>
+            <Shield className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Platform Admin Mode:</strong> You can create an organization with any domain.
+            </AlertDescription>
+          </Alert>
 
           <div className="space-y-2">
             <Label htmlFor="orgName">Organization Name</Label>

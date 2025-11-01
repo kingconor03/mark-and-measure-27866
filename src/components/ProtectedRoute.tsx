@@ -28,10 +28,13 @@ export const ProtectedRoute = ({ children, requireOrg = true }: ProtectedRoutePr
     // Wait for org data to load
     if (orgLoading) return;
 
-    // If org is required but user has none - redirect to create org
-    if (requireOrg && !currentOrg) {
-      navigate("/create-organization");
-      return;
+    // If org is required but user has none AND they're not already on create-org page
+    // Give a brief moment for auto-assignment to complete
+    if (requireOrg && !currentOrg && location.pathname !== "/create-organization") {
+      const timer = setTimeout(() => {
+        navigate("/create-organization");
+      }, 1000); // Wait 1 second for auto-assignment
+      return () => clearTimeout(timer);
     }
 
     // If user has org but is on create-organization page - redirect to dashboard

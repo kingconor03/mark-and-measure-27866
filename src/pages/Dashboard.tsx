@@ -4,7 +4,7 @@ import { DashboardSidebar } from "@/components/DashboardSidebar";
 import { ProjectCard } from "@/components/ProjectCard";
 import { NewProjectModal } from "@/components/NewProjectModal";
 import { Button } from "@/components/ui/button";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrganisation } from "@/hooks/useOrganisation";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,7 +14,7 @@ const Dashboard = () => {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { currentOrg, loading: orgLoading } = useOrganisation();
   const navigate = useNavigate();
 
@@ -54,14 +54,20 @@ const Dashboard = () => {
 
       <main className="flex-1 p-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
-          <p className="text-muted-foreground">
-            {features.orgEnabled && currentOrg 
-              ? `${currentOrg.name} - Construction Projects`
-              : 'Your Construction Projects'
-            }
-          </p>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
+            <p className="text-muted-foreground">
+              {features.orgEnabled && currentOrg 
+                ? `${currentOrg.name} - Construction Projects`
+                : 'Your Construction Projects'
+              }
+            </p>
+          </div>
+          <Button onClick={signOut} variant="ghost" size="sm">
+            <LogOut className="mr-2 h-4 w-4" />
+            Sign Out
+          </Button>
         </div>
 
         {/* New Project Button */}

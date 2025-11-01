@@ -11,6 +11,9 @@ import { useOrganisation } from "@/hooks/useOrganisation";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { OrgMembersManager } from "@/components/admin/OrgMembersManager";
+import { OrganisationsManager } from "@/components/admin/OrganisationsManager";
+import { QuoteRequestsManager } from "@/components/admin/QuoteRequestsManager";
+import { CertRequestsManager } from "@/components/admin/CertRequestsManager";
 
 export default function Admin() {
   const { isPlatformAdmin, loading: orgLoading, currentOrg } = useOrganisation();
@@ -133,13 +136,19 @@ export default function Admin() {
           </p>
         </div>
 
-        <Tabs defaultValue="users" className="space-y-4">
+        <Tabs defaultValue="organisations" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="organisations">Organisations</TabsTrigger>
             <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="organizations">Organizations</TabsTrigger>
-            <TabsTrigger value="members">Organization Members</TabsTrigger>
-            {currentOrg && <TabsTrigger value="org-admin">Manage My Org</TabsTrigger>}
+            <TabsTrigger value="members">Members</TabsTrigger>
+            <TabsTrigger value="quotes">Quote Requests</TabsTrigger>
+            <TabsTrigger value="certifications">Certifications</TabsTrigger>
+            {currentOrg && <TabsTrigger value="org-admin">My Org</TabsTrigger>}
           </TabsList>
+
+          <TabsContent value="organisations">
+            <OrganisationsManager />
+          </TabsContent>
 
           <TabsContent value="users">
             <Card>
@@ -180,54 +189,12 @@ export default function Admin() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="organizations">
-            <Card>
-              <CardHeader>
-                <CardTitle>All Organizations</CardTitle>
-                <CardDescription>View and manage all organizations</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Primary Domain</TableHead>
-                      <TableHead>All Domains</TableHead>
-                      <TableHead>Created At</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {organizations.map((org) => (
-                      <TableRow key={org.id}>
-                        <TableCell className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4" />
-                          {org.name}
-                        </TableCell>
-                        <TableCell>{org.primary_domain}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {org.domains.map((domain: string) => (
-                              <Badge key={domain} variant="secondary">{domain}</Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell>{new Date(org.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteOrganization(org.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+          <TabsContent value="quotes">
+            <QuoteRequestsManager />
+          </TabsContent>
+
+          <TabsContent value="certifications">
+            <CertRequestsManager />
           </TabsContent>
 
           <TabsContent value="members">

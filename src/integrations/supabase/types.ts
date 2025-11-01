@@ -92,36 +92,45 @@ export type Database = {
       }
       certification_requests: {
         Row: {
+          admin_comments: string | null
           admin_notes: string | null
+          certification_files: Json | null
           created_at: string
           created_by: string
           id: string
           notes: string | null
           organisation_id: string
+          processing_org_id: string | null
           project_id: string
           result_files: Json | null
           status: Database["public"]["Enums"]["certification_status"]
           updated_at: string
         }
         Insert: {
+          admin_comments?: string | null
           admin_notes?: string | null
+          certification_files?: Json | null
           created_at?: string
           created_by: string
           id?: string
           notes?: string | null
           organisation_id: string
+          processing_org_id?: string | null
           project_id: string
           result_files?: Json | null
           status?: Database["public"]["Enums"]["certification_status"]
           updated_at?: string
         }
         Update: {
+          admin_comments?: string | null
           admin_notes?: string | null
+          certification_files?: Json | null
           created_at?: string
           created_by?: string
           id?: string
           notes?: string | null
           organisation_id?: string
+          processing_org_id?: string | null
           project_id?: string
           result_files?: Json | null
           status?: Database["public"]["Enums"]["certification_status"]
@@ -131,6 +140,27 @@ export type Database = {
           {
             foreignKeyName: "certification_requests_organisation_id_fkey"
             columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisation_stats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certification_requests_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certification_requests_processing_org_id_fkey"
+            columns: ["processing_org_id"]
+            isOneToOne: false
+            referencedRelation: "organisation_stats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certification_requests_processing_org_id_fkey"
+            columns: ["processing_org_id"]
             isOneToOne: false
             referencedRelation: "organisations"
             referencedColumns: ["id"]
@@ -254,6 +284,13 @@ export type Database = {
             foreignKeyName: "notifications_organisation_id_fkey"
             columns: ["organisation_id"]
             isOneToOne: false
+            referencedRelation: "organisation_stats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
             referencedRelation: "organisations"
             referencedColumns: ["id"]
           },
@@ -286,6 +323,13 @@ export type Database = {
             foreignKeyName: "organisation_members_organisation_id_fkey"
             columns: ["organisation_id"]
             isOneToOne: false
+            referencedRelation: "organisation_stats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "organisation_members_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
             referencedRelation: "organisations"
             referencedColumns: ["id"]
           },
@@ -296,6 +340,7 @@ export type Database = {
           created_at: string
           domains: string[]
           id: string
+          is_active: boolean | null
           name: string
           primary_domain: string
           updated_at: string
@@ -304,6 +349,7 @@ export type Database = {
           created_at?: string
           domains?: string[]
           id?: string
+          is_active?: boolean | null
           name: string
           primary_domain: string
           updated_at?: string
@@ -312,6 +358,7 @@ export type Database = {
           created_at?: string
           domains?: string[]
           id?: string
+          is_active?: boolean | null
           name?: string
           primary_domain?: string
           updated_at?: string
@@ -519,6 +566,13 @@ export type Database = {
             foreignKeyName: "projects_organisation_id_fkey"
             columns: ["organisation_id"]
             isOneToOne: false
+            referencedRelation: "organisation_stats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
             referencedRelation: "organisations"
             referencedColumns: ["id"]
           },
@@ -574,6 +628,7 @@ export type Database = {
           id: string
           notes: string | null
           organisation_id: string
+          processing_org_id: string | null
           project_id: string | null
           status: Database["public"]["Enums"]["quote_status"]
           updated_at: string
@@ -585,6 +640,7 @@ export type Database = {
           id?: string
           notes?: string | null
           organisation_id: string
+          processing_org_id?: string | null
           project_id?: string | null
           status?: Database["public"]["Enums"]["quote_status"]
           updated_at?: string
@@ -596,6 +652,7 @@ export type Database = {
           id?: string
           notes?: string | null
           organisation_id?: string
+          processing_org_id?: string | null
           project_id?: string | null
           status?: Database["public"]["Enums"]["quote_status"]
           updated_at?: string
@@ -604,6 +661,27 @@ export type Database = {
           {
             foreignKeyName: "quote_requests_organisation_id_fkey"
             columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisation_stats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_requests_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_requests_processing_org_id_fkey"
+            columns: ["processing_org_id"]
+            isOneToOne: false
+            referencedRelation: "organisation_stats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_requests_processing_org_id_fkey"
+            columns: ["processing_org_id"]
             isOneToOne: false
             referencedRelation: "organisations"
             referencedColumns: ["id"]
@@ -644,6 +722,13 @@ export type Database = {
             foreignKeyName: "user_roles_organisation_id_fkey"
             columns: ["organisation_id"]
             isOneToOne: false
+            referencedRelation: "organisation_stats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_roles_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
             referencedRelation: "organisations"
             referencedColumns: ["id"]
           },
@@ -651,7 +736,19 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      organisation_stats: {
+        Row: {
+          created_at: string | null
+          domains: string[] | null
+          id: string | null
+          is_active: boolean | null
+          member_count: number | null
+          name: string | null
+          primary_domain: string | null
+          project_count: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       admin_count: { Args: { p_org: string }; Returns: number }

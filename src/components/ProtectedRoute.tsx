@@ -11,7 +11,7 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute = ({ children, requireOrg = true }: ProtectedRouteProps) => {
   const { user, loading: authLoading } = useAuth();
-  const { currentOrg, loading: orgLoading } = useOrganisation();
+  const { currentOrg, isPlatformAdmin, loading: orgLoading } = useOrganisation();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -28,13 +28,21 @@ export const ProtectedRoute = ({ children, requireOrg = true }: ProtectedRoutePr
     // Wait for org data to load
     if (orgLoading) return;
 
-    // If org is required but user has none AND they're not already on create-org page
-    // Give a brief moment for auto-assignment to complete
+    // Platform admins always bypass org requirement - they have BladePile org
+    if (isPlatformAdmin) {
+      // If platform admin is on create-org page, redirect to dashboard
+      if (location.pathname === "/create-organization") {
+        navigate("/dashboard");
+        return;
+      }
+      // Platform admins can access all routes
+      return;
+    }
+
+    // Regular users need an org for protected routes
     if (requireOrg && !currentOrg && location.pathname !== "/create-organization") {
-      const timer = setTimeout(() => {
-        navigate("/create-organization");
-      }, 1000); // Wait 1 second for auto-assignment
-      return () => clearTimeout(timer);
+      navigate("/create-organization");
+      return;
     }
 
     // If user has org but is on create-organization page - redirect to dashboard
@@ -42,7 +50,7 @@ export const ProtectedRoute = ({ children, requireOrg = true }: ProtectedRoutePr
       navigate("/dashboard");
       return;
     }
-  }, [user, currentOrg, authLoading, orgLoading, requireOrg, navigate, location.pathname]);
+  }, [user, currentOrg, isPlatformAdmin, authLoading, orgLoading, requireOrg, navigate, location.pathname]);
 
   // Show loading while checking auth and org status
   if (authLoading || orgLoading) {
@@ -58,7 +66,12 @@ export const ProtectedRoute = ({ children, requireOrg = true }: ProtectedRoutePr
     return null;
   }
 
-  // Org required but not found
+  // Platform admins always have access (they have BladePile org)
+  if (isPlatformAdmin) {
+    return <>{children}</>;
+  }
+
+  // Org required but not found for regular users
   if (requireOrg && !currentOrg) {
     return null;
   }

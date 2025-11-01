@@ -37,6 +37,12 @@ const CreateOrganization = () => {
       return;
     }
 
+    // Platform admins should never see this page
+    if (!orgLoading && isPlatformAdmin) {
+      navigate("/dashboard");
+      return;
+    }
+
     // If user already has org, redirect to dashboard
     if (!orgLoading && currentOrg) {
       navigate("/dashboard");
@@ -47,7 +53,7 @@ const CreateOrganization = () => {
     if (user?.email && !domain) {
       setDomain(user.email.split('@')[1]);
     }
-  }, [user, currentOrg, orgLoading, navigate, domain]);
+  }, [user, currentOrg, isPlatformAdmin, orgLoading, navigate, domain]);
 
   const handleCreateOrg = async () => {
     if (!user?.email || !orgName.trim() || !domain.trim()) {

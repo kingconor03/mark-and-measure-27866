@@ -655,6 +655,10 @@ export type Database = {
     }
     Functions: {
       admin_count: { Args: { p_org: string }; Returns: number }
+      ensure_platform_admin_membership: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
       has_role_in_org: {
         Args: {
           _org_id: string

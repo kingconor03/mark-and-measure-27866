@@ -11,7 +11,7 @@ import { Loader2, Info, Shield } from "lucide-react";
 import { toast } from "sonner";
 
 const CreateOrganization = () => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { currentOrg, isPlatformAdmin, createOrganisation, loading: orgLoading } = useOrganisation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -132,6 +132,15 @@ const CreateOrganization = () => {
             ) : (
               'Create Organization'
             )}
+          </Button>
+
+          <Button 
+            onClick={signOut}
+            variant="ghost"
+            className="w-full"
+            disabled={loading}
+          >
+            Sign Out
           </Button>
         </CardContent>
       </Card>

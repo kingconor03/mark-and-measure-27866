@@ -1,8 +1,11 @@
-import { LayoutDashboard, Settings } from "lucide-react";
+import { LayoutDashboard, Settings, Shield } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useOrganisation } from "@/hooks/useOrganisation";
 
 export const DashboardSidebar = () => {
+  const { isPlatformAdmin } = useOrganisation();
+
   return (
     <aside className="w-64 h-screen bg-sidebar border-r border-sidebar-border flex flex-col">
       {/* Logo */}
@@ -46,6 +49,24 @@ export const DashboardSidebar = () => {
               Account Settings
             </NavLink>
           </li>
+          {isPlatformAdmin && (
+            <li>
+              <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-md transition-colors text-sm font-medium",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                  )
+                }
+              >
+                <Shield className="h-5 w-5" />
+                Admin Portal
+              </NavLink>
+            </li>
+          )}
         </ul>
       </nav>
     </aside>

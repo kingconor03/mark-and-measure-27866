@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Editor from "./pages/Editor";
 import Processing from "./pages/Processing";
 import Settings from "./pages/Settings";
+import Admin from "./pages/Admin";
 import CreateOrganization from "./pages/CreateOrganization";
 import NotFound from "./pages/NotFound";
 
@@ -53,6 +54,11 @@ const App = () => (
             <Route path="/settings" element={
               <ProtectedRoute>
                 <Settings />
+              </ProtectedRoute>
+            } />
+            <Route path="/admin" element={
+              <ProtectedRoute>
+                <Admin />
               </ProtectedRoute>
             } />
             

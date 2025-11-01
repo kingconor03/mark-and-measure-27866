@@ -654,6 +654,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_count: { Args: { p_org: string }; Returns: number }
       has_role_in_org: {
         Args: {
           _org_id: string

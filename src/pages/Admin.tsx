@@ -10,14 +10,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganisation } from "@/hooks/useOrganisation";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { OrgMembersManager } from "@/components/admin/OrgMembersManager";
 
 export default function Admin() {
-  const { isPlatformAdmin, loading: orgLoading } = useOrganisation();
+  const { isPlatformAdmin, loading: orgLoading, currentOrg } = useOrganisation();
   const navigate = useNavigate();
   const [users, setUsers] = useState<any[]>([]);
   const [organizations, setOrganizations] = useState<any[]>([]);
   const [orgMembers, setOrgMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string>("");
 
   useEffect(() => {
     if (!orgLoading && !isPlatformAdmin) {
@@ -25,6 +27,14 @@ export default function Admin() {
       toast.error("Unauthorized access");
     }
   }, [isPlatformAdmin, orgLoading, navigate]);
+
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setCurrentUserId(user.id);
+    };
+    getCurrentUser();
+  }, []);
 
   useEffect(() => {
     if (isPlatformAdmin) {
@@ -128,6 +138,7 @@ export default function Admin() {
             <TabsTrigger value="users">Users</TabsTrigger>
             <TabsTrigger value="organizations">Organizations</TabsTrigger>
             <TabsTrigger value="members">Organization Members</TabsTrigger>
+            {currentOrg && <TabsTrigger value="org-admin">Manage My Org</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="users">
@@ -282,6 +293,16 @@ export default function Admin() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {currentOrg && (
+            <TabsContent value="org-admin">
+              <OrgMembersManager 
+                orgId={currentOrg.id} 
+                orgName={currentOrg.name}
+                currentUserId={currentUserId}
+              />
+            </TabsContent>
+          )}
         </Tabs>
       </main>
     </div>

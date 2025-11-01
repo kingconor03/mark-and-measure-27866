@@ -43,7 +43,7 @@ serve(async (req) => {
     // Verify the project belongs to the authenticated user and get the trusted PDF path
     const { data: project, error: projectError } = await supabaseClient
       .from('projects')
-      .select('user_id, pdf_url')
+      .select('user_id, pdf_url, organisation_id')
       .eq('id', projectId)
       .single();
 
@@ -54,9 +54,26 @@ serve(async (req) => {
       );
     }
 
-    if (project.user_id !== user.id) {
+    // Check authorization: legacy user-owned or org member
+    let isAuthorized = false;
+    if (project.organisation_id) {
+      // Multi-tenant: check org membership
+      const { data: membership } = await supabaseClient
+        .from('organisation_members')
+        .select('id')
+        .eq('organisation_id', project.organisation_id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      isAuthorized = !!membership;
+    } else {
+      // Legacy: check direct ownership
+      isAuthorized = project.user_id === user.id;
+    }
+
+    if (!isAuthorized) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized: Project does not belong to user' }),
+        JSON.stringify({ error: 'Unauthorized: Project does not belong to user or their organization' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -68,8 +85,43 @@ serve(async (req) => {
       );
     }
 
-    // Extract the trusted path from the stored URL
-    const pdfPath = project.pdf_url.split('/blueprints/')[1];
+    // Determine bucket and path based on org or legacy structure
+    let bucket: string;
+    let pdfPath: string;
+    
+    if (project.organisation_id) {
+      // Multi-tenant: org-assets bucket with org-{id} prefix
+      bucket = 'org-assets';
+      const urlMatch = project.pdf_url.match(/org-assets\/(.+)/);
+      if (!urlMatch) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid PDF URL format' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      pdfPath = urlMatch[1];
+      
+      // Validate org-scoped path
+      const expectedPrefix = `org-${project.organisation_id}/projects/${projectId}/`;
+      if (!pdfPath.startsWith(expectedPrefix)) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid PDF path for this organization and project' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      // Legacy: blueprints bucket with user_id prefix
+      bucket = 'blueprints';
+      pdfPath = project.pdf_url.split('/blueprints/')[1];
+      
+      const expectedPrefix = `${user.id}/${projectId}/`;
+      if (!pdfPath.startsWith(expectedPrefix)) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid PDF path for this user and project' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
     
     // Additional path validation to prevent traversal
     if (pdfPath.includes('..') || pdfPath.includes('//')) {
@@ -79,20 +131,12 @@ serve(async (req) => {
       );
     }
 
-    const expectedPrefix = `${user.id}/${projectId}/`;
-    if (!pdfPath.startsWith(expectedPrefix)) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid PDF path for this user and project' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`Using trusted PDF path: ${pdfPath}`);
+    console.log(`Using trusted PDF path: ${pdfPath} from bucket: ${bucket}`);
 
     // Download PDF from storage
     const { data: pdfData, error: downloadError } = await supabaseClient
       .storage
-      .from('blueprints')
+      .from(bucket)
       .download(pdfPath);
 
     if (downloadError) {
@@ -143,8 +187,8 @@ serve(async (req) => {
       );
     }
     
-    // Get the storage path for the PDF (bucket is now private, so we store the path)
-    const storagePath = `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/blueprints/${pdfPath}`;
+    // Get the storage path for the PDF
+    const storagePath = `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/${bucket}/${pdfPath}`;
 
     // Create page records for each page in the PDF
     const pageRecords = [];
@@ -163,6 +207,22 @@ serve(async (req) => {
     if (insertError) {
       console.error('Error inserting pages:', insertError);
       throw insertError;
+    }
+
+    // Create asset record for the PDF
+    if (project.organisation_id) {
+      const { error: assetError } = await supabaseClient
+        .from('project_assets')
+        .insert({
+          project_id: projectId,
+          kind: 'pdf',
+          path: pdfPath,
+          meta: { page_count: pageCount }
+        });
+
+      if (assetError) {
+        console.error('Error creating asset record:', assetError);
+      }
     }
 
     // Update project status

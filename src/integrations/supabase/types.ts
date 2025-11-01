@@ -14,6 +14,136 @@ export type Database = {
   }
   public: {
     Tables: {
+      annotations: {
+        Row: {
+          created_at: string
+          created_by: string
+          data: Json
+          id: string
+          page_index: number
+          project_id: string
+          type: Database["public"]["Enums"]["annotation_type"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          data?: Json
+          id?: string
+          page_index: number
+          project_id: string
+          type: Database["public"]["Enums"]["annotation_type"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          data?: Json
+          id?: string
+          page_index?: number
+          project_id?: string
+          type?: Database["public"]["Enums"]["annotation_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "annotations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      certification_files: {
+        Row: {
+          certification_request_id: string
+          created_at: string
+          folder: Database["public"]["Enums"]["cert_folder"]
+          id: string
+          meta: Json | null
+          path: string
+        }
+        Insert: {
+          certification_request_id: string
+          created_at?: string
+          folder: Database["public"]["Enums"]["cert_folder"]
+          id?: string
+          meta?: Json | null
+          path: string
+        }
+        Update: {
+          certification_request_id?: string
+          created_at?: string
+          folder?: Database["public"]["Enums"]["cert_folder"]
+          id?: string
+          meta?: Json | null
+          path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certification_files_certification_request_id_fkey"
+            columns: ["certification_request_id"]
+            isOneToOne: false
+            referencedRelation: "certification_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      certification_requests: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          created_by: string
+          id: string
+          notes: string | null
+          organisation_id: string
+          project_id: string
+          result_files: Json | null
+          status: Database["public"]["Enums"]["certification_status"]
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          notes?: string | null
+          organisation_id: string
+          project_id: string
+          result_files?: Json | null
+          status?: Database["public"]["Enums"]["certification_status"]
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          notes?: string | null
+          organisation_id?: string
+          project_id?: string
+          result_files?: Json | null
+          status?: Database["public"]["Enums"]["certification_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certification_requests_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certification_requests_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       floating_summary_preferences: {
         Row: {
           created_at: string
@@ -87,6 +217,44 @@ export type Database = {
             columns: ["page_id"]
             isOneToOne: false
             referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          organisation_id: string
+          payload: Json
+          read_at: string | null
+          to_user_id: string | null
+          type: Database["public"]["Enums"]["notification_type"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          organisation_id: string
+          payload?: Json
+          read_at?: string | null
+          to_user_id?: string | null
+          type: Database["public"]["Enums"]["notification_type"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          organisation_id?: string
+          payload?: Json
+          read_at?: string | null
+          to_user_id?: string | null
+          type?: Database["public"]["Enums"]["notification_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
             referencedColumns: ["id"]
           },
         ]
@@ -262,6 +430,41 @@ export type Database = {
         }
         Relationships: []
       }
+      project_assets: {
+        Row: {
+          created_at: string
+          id: string
+          kind: Database["public"]["Enums"]["asset_kind"]
+          meta: Json | null
+          path: string
+          project_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: Database["public"]["Enums"]["asset_kind"]
+          meta?: Json | null
+          path: string
+          project_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["asset_kind"]
+          meta?: Json | null
+          path?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_assets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           created_at: string | null
@@ -309,6 +512,92 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quote_request_files: {
+        Row: {
+          created_at: string
+          folder: Database["public"]["Enums"]["quote_folder"]
+          id: string
+          meta: Json | null
+          path: string
+          quote_request_id: string
+        }
+        Insert: {
+          created_at?: string
+          folder: Database["public"]["Enums"]["quote_folder"]
+          id?: string
+          meta?: Json | null
+          path: string
+          quote_request_id: string
+        }
+        Update: {
+          created_at?: string
+          folder?: Database["public"]["Enums"]["quote_folder"]
+          id?: string
+          meta?: Json | null
+          path?: string
+          quote_request_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_request_files_quote_request_id_fkey"
+            columns: ["quote_request_id"]
+            isOneToOne: false
+            referencedRelation: "quote_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quote_requests: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          created_by: string
+          id: string
+          notes: string | null
+          organisation_id: string
+          project_id: string | null
+          status: Database["public"]["Enums"]["quote_status"]
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          created_by: string
+          id?: string
+          notes?: string | null
+          organisation_id: string
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["quote_status"]
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          created_by?: string
+          id?: string
+          notes?: string | null
+          organisation_id?: string
+          project_id?: string | null
+          status?: Database["public"]["Enums"]["quote_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_requests_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_requests_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -370,7 +659,35 @@ export type Database = {
       }
     }
     Enums: {
+      annotation_type: "pile" | "footing"
       app_role: "admin" | "member" | "viewer"
+      asset_kind: "pdf" | "page_image" | "other"
+      cert_folder:
+        | "install_report"
+        | "latest_plans"
+        | "soil_report"
+        | "architectural"
+        | "engineering"
+        | "other"
+      certification_status:
+        | "new"
+        | "awaiting_docs"
+        | "in_progress"
+        | "approved"
+        | "rejected"
+      notification_type:
+        | "quote_status_change"
+        | "cert_status_change"
+        | "org_invite"
+        | "role_change"
+        | "other"
+      quote_folder: "soil_report" | "architectural" | "engineering" | "other"
+      quote_status:
+        | "new"
+        | "awaiting_docs"
+        | "in_progress"
+        | "completed"
+        | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -498,7 +815,39 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      annotation_type: ["pile", "footing"],
       app_role: ["admin", "member", "viewer"],
+      asset_kind: ["pdf", "page_image", "other"],
+      cert_folder: [
+        "install_report",
+        "latest_plans",
+        "soil_report",
+        "architectural",
+        "engineering",
+        "other",
+      ],
+      certification_status: [
+        "new",
+        "awaiting_docs",
+        "in_progress",
+        "approved",
+        "rejected",
+      ],
+      notification_type: [
+        "quote_status_change",
+        "cert_status_change",
+        "org_invite",
+        "role_change",
+        "other",
+      ],
+      quote_folder: ["soil_report", "architectural", "engineering", "other"],
+      quote_status: [
+        "new",
+        "awaiting_docs",
+        "in_progress",
+        "completed",
+        "rejected",
+      ],
     },
   },
 } as const

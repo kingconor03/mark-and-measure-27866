@@ -119,15 +119,6 @@ export function OrgMembersManager({ orgId, orgName, currentUserId }: OrgMembersM
     }
   };
 
-  const getRoleBadgeVariant = (role: string) => {
-    switch (role) {
-      case 'admin': return 'default';
-      case 'member': return 'secondary';
-      case 'viewer': return 'outline';
-      default: return 'secondary';
-    }
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -212,11 +203,7 @@ export function OrgMembersManager({ orgId, orgName, currentUserId }: OrgMembersM
                         disabled={isCurrentUser && member.role === 'admin'}
                       >
                         <SelectTrigger className="w-32">
-                          <SelectValue>
-                            <Badge variant={getRoleBadgeVariant(member.role)}>
-                              {member.role}
-                            </Badge>
-                          </SelectValue>
+                          <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="viewer">Viewer</SelectItem>

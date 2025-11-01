@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { features } from "@/config/features";
 
 const Auth = () => {
   const [mode, setMode] = useState<"login" | "signup" | "reset">("login");
@@ -19,7 +21,12 @@ const Auth = () => {
 
   useEffect(() => {
     if (user) {
-      navigate("/dashboard");
+      // In org mode, redirect to onboarding to check org membership
+      if (features.orgEnabled) {
+        navigate("/onboarding");
+      } else {
+        navigate("/dashboard");
+      }
     }
   }, [user, navigate]);
 
@@ -48,9 +55,7 @@ const Auth = () => {
           toast.error(error.message);
         } else {
           toast.success(mode === "login" ? "Welcome back!" : "Account created successfully!");
-          if (mode === "login") {
-            navigate("/dashboard");
-          }
+          // Navigation handled by useEffect watching user state
         }
       }
     } catch (error) {
@@ -71,6 +76,15 @@ const Auth = () => {
 
         {/* Auth Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
+          {features.orgEnabled && mode === "signup" && (
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                Use your company email. You'll be added to your organization or can create a new one.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="email">Work Email</Label>
             <Input

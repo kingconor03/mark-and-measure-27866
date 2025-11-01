@@ -14,6 +14,8 @@ import { Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useOrganisation } from "@/hooks/useOrganisation";
+import { features } from "@/config/features";
 
 interface NewProjectModalProps {
   open: boolean;
@@ -26,6 +28,7 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
+  const { currentOrg } = useOrganisation();
   const navigate = useNavigate();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -58,13 +61,21 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
 
     try {
       // Create project record
+      const projectData: any = {
+        name: projectName,
+        user_id: user.id,
+        status: "processing",
+        created_by: user.id
+      };
+
+      // Add organisation_id if org mode is enabled
+      if (features.orgEnabled && currentOrg) {
+        projectData.organisation_id = currentOrg.id;
+      }
+
       const { data: project, error: projectError } = await supabase
         .from("projects")
-        .insert({
-          name: projectName,
-          user_id: user.id,
-          status: "processing"
-        })
+        .insert(projectData)
         .select()
         .single();
 

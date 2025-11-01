@@ -6,13 +6,16 @@ import { NewProjectModal } from "@/components/NewProjectModal";
 import { Button } from "@/components/ui/button";
 import { Plus, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useOrganisation } from "@/hooks/useOrganisation";
 import { supabase } from "@/integrations/supabase/client";
+import { features } from "@/config/features";
 
 const Dashboard = () => {
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const { currentOrg, loading: orgLoading } = useOrganisation();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -20,15 +23,31 @@ const Dashboard = () => {
       navigate("/auth");
       return;
     }
-    fetchProjects();
-  }, [user, navigate]);
+    
+    // If org mode enabled, check if user has org
+    if (features.orgEnabled && !orgLoading && !currentOrg) {
+      navigate("/onboarding");
+      return;
+    }
+    
+    if (!orgLoading) {
+      fetchProjects();
+    }
+  }, [user, currentOrg, orgLoading, navigate]);
 
   const fetchProjects = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("projects")
         .select("*")
         .order("created_at", { ascending: false });
+
+      // If org mode enabled, filter by current org
+      if (features.orgEnabled && currentOrg) {
+        query = query.eq("organisation_id", currentOrg.id);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       setProjects(data || []);
@@ -47,7 +66,12 @@ const Dashboard = () => {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Welcome Back</h1>
-          <p className="text-muted-foreground">Your Construction Projects</p>
+          <p className="text-muted-foreground">
+            {features.orgEnabled && currentOrg 
+              ? `${currentOrg.name} - Construction Projects`
+              : 'Your Construction Projects'
+            }
+          </p>
         </div>
 
         {/* New Project Button */}

@@ -90,7 +90,7 @@ export default function Admin() {
     }
   };
 
-  const updateMemberRole = async (memberId: string, newRole: 'admin' | 'member' | 'viewer') => {
+  const updateMemberRole = async (memberId: string, newRole: 'admin' | 'member') => {
     try {
       const { error } = await supabase
         .from('organisation_members')
@@ -275,14 +275,6 @@ export default function Admin() {
                               disabled={member.role === 'member'}
                             >
                               Member
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => updateMemberRole(member.id, 'viewer')}
-                              disabled={member.role === 'viewer'}
-                            >
-                              Viewer
                             </Button>
                           </div>
                         </TableCell>

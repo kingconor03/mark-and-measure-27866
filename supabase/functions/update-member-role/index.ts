@@ -34,8 +34,8 @@ Deno.serve(async (req) => {
       throw new Error('orgId, targetUserId, and role are required');
     }
 
-    if (!['admin', 'member', 'viewer'].includes(role)) {
-      throw new Error('Invalid role');
+    if (!['admin', 'member'].includes(role)) {
+      throw new Error('Invalid role: only admin or member allowed');
     }
 
     // Verify caller is admin in the org

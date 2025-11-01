@@ -668,6 +668,7 @@ export type Database = {
         Returns: boolean
       }
       is_platform_admin: { Args: { _user_id: string }; Returns: boolean }
+      platform_org_id: { Args: never; Returns: string }
       user_org_ids: {
         Args: { _user_id: string }
         Returns: {

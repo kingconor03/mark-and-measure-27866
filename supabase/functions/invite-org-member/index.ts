@@ -28,14 +28,17 @@ Deno.serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { orgId, email, role = 'viewer' } = await req.json();
+    const { orgId, email, role } = await req.json();
 
     if (!orgId || !email) {
       throw new Error('orgId and email are required');
     }
 
-    if (!['admin', 'member', 'viewer'].includes(role)) {
-      throw new Error('Invalid role');
+    // Only accept admin or member roles, default to member
+    const safeRole = role === 'admin' ? 'admin' : 'member';
+
+    if (!['admin', 'member'].includes(safeRole)) {
+      throw new Error('Invalid role: only admin or member allowed');
     }
 
     // Verify caller is admin in the org
@@ -82,12 +85,12 @@ Deno.serve(async (req) => {
         .insert({
           organisation_id: orgId,
           user_id: existingProfile.id,
-          role
+          role: safeRole
         });
 
       if (insertError) throw insertError;
 
-      console.log(`Added existing user ${email} to org ${orgId} as ${role}`);
+      console.log(`Added existing user ${email} to org ${orgId} as ${safeRole}`);
 
       return new Response(
         JSON.stringify({ success: true, message: 'User added to organization' }),
@@ -113,7 +116,7 @@ Deno.serve(async (req) => {
         .insert({
           organisation_id: orgId,
           user_id: inviteData.user.id,
-          role
+          role: safeRole
         });
 
       if (insertError) {
@@ -121,7 +124,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Sent invitation to ${email} for org ${orgId} as ${role}`);
+    console.log(`Sent invitation to ${email} for org ${orgId} as ${safeRole}`);
 
     return new Response(
       JSON.stringify({ 

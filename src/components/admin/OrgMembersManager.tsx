@@ -13,7 +13,7 @@ import { toast } from "sonner";
 interface Member {
   id: string;
   user_id: string;
-  role: 'admin' | 'member' | 'viewer';
+  role: 'admin' | 'member';
   created_at: string;
   profiles: { email: string } | null;
 }
@@ -28,7 +28,7 @@ export function OrgMembersManager({ orgId, orgName, currentUserId }: OrgMembersM
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<'admin' | 'member' | 'viewer'>('viewer');
+  const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
   const [inviting, setInviting] = useState(false);
 
   const loadMembers = async () => {
@@ -55,7 +55,7 @@ export function OrgMembersManager({ orgId, orgName, currentUserId }: OrgMembersM
     loadMembers();
   }, [orgId]);
 
-  const updateRole = async (userId: string, newRole: 'admin' | 'member' | 'viewer') => {
+  const updateRole = async (userId: string, newRole: 'admin' | 'member') => {
     try {
       const response = await supabase.functions.invoke('update-member-role', {
         body: { orgId, targetUserId: userId, role: newRole },
@@ -109,7 +109,7 @@ export function OrgMembersManager({ orgId, orgName, currentUserId }: OrgMembersM
       }
       
       setInviteEmail("");
-      setInviteRole('viewer');
+      setInviteRole('member');
       loadMembers();
     } catch (error: any) {
       console.error('Error inviting member:', error);
@@ -154,7 +154,6 @@ export function OrgMembersManager({ orgId, orgName, currentUserId }: OrgMembersM
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="viewer">Viewer</SelectItem>
                   <SelectItem value="member">Member</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                 </SelectContent>
@@ -206,7 +205,6 @@ export function OrgMembersManager({ orgId, orgName, currentUserId }: OrgMembersM
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="viewer">Viewer</SelectItem>
                           <SelectItem value="member">Member</SelectItem>
                           <SelectItem value="admin">Admin</SelectItem>
                         </SelectContent>

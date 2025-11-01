@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,17 +18,20 @@ const Auth = () => {
   const [loading, setLoading] = useState(false);
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Get returnTo from URL params
+  const searchParams = new URLSearchParams(location.search);
+  const returnTo = searchParams.get('returnTo') || '/dashboard';
 
   useEffect(() => {
     if (user) {
-      // In org mode, redirect to onboarding to check org membership
-      if (features.orgEnabled) {
-        navigate("/onboarding");
-      } else {
-        navigate("/dashboard");
-      }
+      // Redirect to saved return path or dashboard
+      // Never redirect directly to /create-organization from auth
+      const destination = returnTo === '/create-organization' ? '/dashboard' : returnTo;
+      navigate(destination);
     }
-  }, [user, navigate]);
+  }, [user, navigate, returnTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

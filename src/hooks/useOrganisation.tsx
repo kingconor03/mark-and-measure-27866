@@ -24,6 +24,7 @@ export function useOrganisation() {
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
   const [currentOrg, setCurrentOrg] = useState<Organisation | null>(null);
   const [userRole, setUserRole] = useState<'admin' | 'member' | 'viewer' | null>(null);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -31,12 +32,32 @@ export function useOrganisation() {
       setOrganisations([]);
       setCurrentOrg(null);
       setUserRole(null);
+      setIsPlatformAdmin(false);
       setLoading(false);
       return;
     }
 
     fetchUserOrganisations();
+    checkPlatformAdmin();
   }, [user]);
+
+  const checkPlatformAdmin = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('platform_admins')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!error && data) {
+        setIsPlatformAdmin(true);
+      }
+    } catch (error) {
+      console.error('Error checking platform admin status:', error);
+    }
+  };
 
   const fetchUserOrganisations = async () => {
     if (!user) return;
@@ -139,6 +160,7 @@ export function useOrganisation() {
     currentOrg,
     userRole,
     loading,
+    isPlatformAdmin,
     createOrganisation,
     findOrganisationByDomain,
     addMemberToOrg,

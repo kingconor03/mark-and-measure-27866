@@ -19,21 +19,11 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
-    
-    // If org mode enabled, check if user has org
-    if (features.orgEnabled && !orgLoading && !currentOrg) {
-      navigate("/onboarding");
-      return;
-    }
-    
+    // Wait for org data to load before fetching projects
     if (!orgLoading) {
       fetchProjects();
     }
-  }, [user, currentOrg, orgLoading, navigate]);
+  }, [orgLoading]);
 
   const fetchProjects = async () => {
     try {

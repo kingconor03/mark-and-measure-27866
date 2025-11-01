@@ -138,7 +138,6 @@ const CreateOrganization = () => {
             onClick={signOut}
             variant="ghost"
             className="w-full"
-            disabled={loading}
           >
             Sign Out
           </Button>

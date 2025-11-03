@@ -24,10 +24,14 @@ interface QuoteRequest {
   projects: { name: string } | null;
 }
 
-export function QuoteRequestsManager() {
+interface Props {
+  defaultStatus?: string;
+}
+
+export function QuoteRequestsManager({ defaultStatus = "all" }: Props) {
   const [quotes, setQuotes] = useState<QuoteRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>(defaultStatus);
   const [selectedQuote, setSelectedQuote] = useState<QuoteRequest | null>(null);
   const [adminNote, setAdminNote] = useState("");
   const [processing, setProcessing] = useState(false);

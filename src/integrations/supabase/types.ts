@@ -99,6 +99,7 @@ export type Database = {
           created_by: string
           id: string
           notes: string | null
+          notes_history: Json | null
           organisation_id: string
           processing_org_id: string | null
           project_id: string
@@ -114,6 +115,7 @@ export type Database = {
           created_by: string
           id?: string
           notes?: string | null
+          notes_history?: Json | null
           organisation_id: string
           processing_org_id?: string | null
           project_id: string
@@ -129,6 +131,7 @@ export type Database = {
           created_by?: string
           id?: string
           notes?: string | null
+          notes_history?: Json | null
           organisation_id?: string
           processing_org_id?: string | null
           project_id?: string
@@ -627,6 +630,7 @@ export type Database = {
           created_by: string
           id: string
           notes: string | null
+          notes_history: Json | null
           organisation_id: string
           processing_org_id: string | null
           project_id: string | null
@@ -639,6 +643,7 @@ export type Database = {
           created_by: string
           id?: string
           notes?: string | null
+          notes_history?: Json | null
           organisation_id: string
           processing_org_id?: string | null
           project_id?: string | null
@@ -651,6 +656,7 @@ export type Database = {
           created_by?: string
           id?: string
           notes?: string | null
+          notes_history?: Json | null
           organisation_id?: string
           processing_org_id?: string | null
           project_id?: string | null
@@ -770,6 +776,7 @@ export type Database = {
       }
       is_platform_admin: { Args: { _user_id: string }; Returns: boolean }
       platform_org_id: { Args: never; Returns: string }
+      sidebar_counts_for_me: { Args: never; Returns: Json }
       user_org_ids: {
         Args: { _user_id: string }
         Returns: {

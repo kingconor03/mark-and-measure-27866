@@ -24,10 +24,14 @@ interface CertRequest {
   projects: { name: string } | null;
 }
 
-export function CertRequestsManager() {
+interface Props {
+  defaultStatus?: string;
+}
+
+export function CertRequestsManager({ defaultStatus = "all" }: Props) {
   const [certs, setCerts] = useState<CertRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>(defaultStatus);
   const [selectedCert, setSelectedCert] = useState<CertRequest | null>(null);
   const [adminComments, setAdminComments] = useState("");
   const [processing, setProcessing] = useState(false);

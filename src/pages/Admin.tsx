@@ -1,35 +1,30 @@
 import { useEffect, useState } from "react";
-import { DashboardSidebar } from "@/components/DashboardSidebar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Trash2, Shield, Building2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganisation } from "@/hooks/useOrganisation";
-import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
-import { OrgMembersManager } from "@/components/admin/OrgMembersManager";
+import { useSidebarCounts } from "@/hooks/useSidebarCounts";
 import { OrganisationsManager } from "@/components/admin/OrganisationsManager";
+import { OrgMembersManager } from "@/components/admin/OrgMembersManager";
 import { QuoteRequestsManager } from "@/components/admin/QuoteRequestsManager";
 import { CertRequestsManager } from "@/components/admin/CertRequestsManager";
+import { Loader2, Building2, Users, FileText, Award, LayoutDashboard } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export default function Admin() {
-  const { isPlatformAdmin, loading: orgLoading, currentOrg } = useOrganisation();
   const navigate = useNavigate();
-  const [users, setUsers] = useState<any[]>([]);
-  const [organizations, setOrganizations] = useState<any[]>([]);
-  const [orgMembers, setOrgMembers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { isPlatformAdmin, loading, currentOrg } = useOrganisation();
+  const { counts } = useSidebarCounts();
+  const [activeTab, setActiveTab] = useState("overview");
   const [currentUserId, setCurrentUserId] = useState<string>("");
 
   useEffect(() => {
-    if (!orgLoading && !isPlatformAdmin) {
+    if (!loading && !isPlatformAdmin) {
       navigate("/dashboard");
       toast.error("Unauthorized access");
     }
-  }, [isPlatformAdmin, orgLoading, navigate]);
+  }, [isPlatformAdmin, loading, navigate]);
 
   useEffect(() => {
     const getCurrentUser = async () => {
@@ -39,80 +34,61 @@ export default function Admin() {
     getCurrentUser();
   }, []);
 
-  useEffect(() => {
-    if (isPlatformAdmin) {
-      fetchData();
-    }
-  }, [isPlatformAdmin]);
+  const sidebarItems = [
+    {
+      id: "overview",
+      label: "Overview",
+      icon: LayoutDashboard,
+    },
+    {
+      id: "organisations",
+      label: "Organisations",
+      icon: Building2,
+      children: [
+        { id: "all-orgs", label: "All Organisations" },
+        { id: "add-org", label: "Add Organisation" },
+      ],
+    },
+    {
+      id: "users",
+      label: "Users",
+      icon: Users,
+      children: [
+        { id: "members", label: "Members by Organisation" },
+        { id: "invite-user", label: "Invite User" },
+      ],
+    },
+    {
+      id: "quotes",
+      label: "Quotes",
+      icon: FileText,
+      badge: (counts.quotes_new || 0) + (counts.quotes_awaiting_docs || 0) + (counts.quotes_in_progress || 0),
+      children: [
+        { id: "all-quotes", label: "All Requests" },
+        { id: "quotes-awaiting", label: "Awaiting Docs", badge: counts.quotes_awaiting_docs },
+        { id: "quotes-progress", label: "In Progress", badge: counts.quotes_in_progress },
+        { id: "quotes-completed", label: "Completed" },
+        { id: "quotes-rejected", label: "Rejected" },
+      ],
+    },
+    {
+      id: "certifications",
+      label: "Certifications",
+      icon: Award,
+      badge: (counts.certs_new || 0) + (counts.certs_pending || 0) + (counts.certs_awaiting_docs || 0),
+      children: [
+        { id: "all-certs", label: "All Requests" },
+        { id: "certs-pending", label: "Pending Review", badge: counts.certs_pending },
+        { id: "certs-approved", label: "Approved" },
+        { id: "certs-rejected", label: "Rejected" },
+      ],
+    },
+  ];
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [usersRes, orgsRes, membersRes] = await Promise.all([
-        supabase.from('profiles').select('*'),
-        supabase.from('organisations').select('*'),
-        supabase.from('organisation_members').select('*, organisations(name), profiles(email)')
-      ]);
-
-      if (usersRes.data) setUsers(usersRes.data);
-      if (orgsRes.data) setOrganizations(orgsRes.data);
-      if (membersRes.data) setOrgMembers(membersRes.data);
-    } catch (error) {
-      console.error('Error fetching admin data:', error);
-      toast.error("Failed to load admin data");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteUser = async (userId: string) => {
-    if (!confirm("Are you sure you want to delete this user?")) return;
-    
-    try {
-      const { error } = await supabase.from('profiles').delete().eq('id', userId);
-      if (error) throw error;
-      toast.success("User deleted successfully");
-      fetchData();
-    } catch (error) {
-      console.error('Error deleting user:', error);
-      toast.error("Failed to delete user");
-    }
-  };
-
-  const deleteOrganization = async (orgId: string) => {
-    if (!confirm("Are you sure you want to delete this organization?")) return;
-    
-    try {
-      const { error } = await supabase.from('organisations').delete().eq('id', orgId);
-      if (error) throw error;
-      toast.success("Organization deleted successfully");
-      fetchData();
-    } catch (error) {
-      console.error('Error deleting organization:', error);
-      toast.error("Failed to delete organization");
-    }
-  };
-
-  const updateMemberRole = async (memberId: string, newRole: 'admin' | 'member') => {
-    try {
-      const { error } = await supabase
-        .from('organisation_members')
-        .update({ role: newRole })
-        .eq('id', memberId);
-      
-      if (error) throw error;
-      toast.success("Role updated successfully");
-      fetchData();
-    } catch (error) {
-      console.error('Error updating role:', error);
-      toast.error("Failed to update role");
-    }
-  };
-
-  if (orgLoading || loading) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -121,148 +97,140 @@ export default function Admin() {
     return null;
   }
 
-  return (
-    <div className="min-h-screen flex bg-background">
-      <DashboardSidebar />
-      
-      <main className="flex-1 p-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-2">
-            <Shield className="h-8 w-8 text-primary" />
-            <h1 className="text-3xl font-bold">Platform Administration</h1>
+  const renderContent = () => {
+    switch (activeTab) {
+      case "overview":
+        return (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold">Platform Overview</h2>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-lg border bg-card p-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-muted-foreground">Pending Quotes</h3>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="mt-2 text-2xl font-bold">
+                  {(counts.quotes_new || 0) + (counts.quotes_awaiting_docs || 0) + (counts.quotes_in_progress || 0)}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-card p-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-muted-foreground">Pending Certifications</h3>
+                  <Award className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="mt-2 text-2xl font-bold">
+                  {(counts.certs_new || 0) + (counts.certs_pending || 0) + (counts.certs_awaiting_docs || 0)}
+                </div>
+              </div>
+            </div>
           </div>
-          <p className="text-muted-foreground">
-            Manage users, organizations, and system settings
-          </p>
+        );
+
+      case "all-orgs":
+      case "add-org":
+        return <OrganisationsManager />;
+
+      case "members":
+      case "invite-user":
+        return currentOrg ? (
+          <OrgMembersManager orgId={currentOrg.id} orgName={currentOrg.name} currentUserId={currentUserId} />
+        ) : <div>Select an organisation to manage members</div>;
+
+      case "all-quotes":
+        return <QuoteRequestsManager />;
+
+      case "quotes-awaiting":
+        return <QuoteRequestsManager defaultStatus="awaiting_docs" />;
+
+      case "quotes-progress":
+        return <QuoteRequestsManager defaultStatus="in_progress" />;
+
+      case "quotes-completed":
+        return <QuoteRequestsManager defaultStatus="completed" />;
+
+      case "quotes-rejected":
+        return <QuoteRequestsManager defaultStatus="rejected" />;
+
+      case "all-certs":
+        return <CertRequestsManager />;
+
+      case "certs-pending":
+        return <CertRequestsManager defaultStatus="pending_review" />;
+
+      case "certs-approved":
+        return <CertRequestsManager defaultStatus="approved" />;
+
+      case "certs-rejected":
+        return <CertRequestsManager defaultStatus="rejected" />;
+
+      default:
+        return <div>Select an option from the sidebar</div>;
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex w-full bg-background">
+      {/* Sidebar */}
+      <aside className="w-64 border-r bg-card flex-shrink-0">
+        <div className="p-6 border-b">
+          <h1 className="text-xl font-bold">Platform Admin</h1>
+          <p className="text-sm text-muted-foreground">BladePile Management</p>
         </div>
+        <nav className="p-4 space-y-2">
+          {sidebarItems.map((item) => (
+            <div key={item.id}>
+              <button
+                onClick={() => setActiveTab(item.id)}
+                className={cn(
+                  "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                  activeTab === item.id
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-muted text-foreground"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.label}</span>
+                </div>
+                {item.badge !== undefined && item.badge > 0 && (
+                  <Badge variant="secondary" className="ml-auto">
+                    {item.badge}
+                  </Badge>
+                )}
+              </button>
+              {item.children && (
+                <div className="ml-6 mt-1 space-y-1">
+                  {item.children.map((child) => (
+                    <button
+                      key={child.id}
+                      onClick={() => setActiveTab(child.id)}
+                      className={cn(
+                        "w-full flex items-center justify-between px-3 py-1.5 rounded-md text-sm transition-colors",
+                        activeTab === child.id
+                          ? "bg-muted font-medium"
+                          : "hover:bg-muted/50 text-muted-foreground"
+                      )}
+                    >
+                      <span>{child.label}</span>
+                      {child.badge !== undefined && child.badge > 0 && (
+                        <Badge variant="outline" className="ml-auto text-xs">
+                          {child.badge}
+                        </Badge>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </nav>
+      </aside>
 
-        <Tabs defaultValue="organisations" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="organisations">Organisations</TabsTrigger>
-            <TabsTrigger value="users">Users</TabsTrigger>
-            <TabsTrigger value="members">Members</TabsTrigger>
-            <TabsTrigger value="quotes">Quote Requests</TabsTrigger>
-            <TabsTrigger value="certifications">Certifications</TabsTrigger>
-            {currentOrg && <TabsTrigger value="org-admin">My Org</TabsTrigger>}
-          </TabsList>
-
-          <TabsContent value="organisations">
-            <OrganisationsManager />
-          </TabsContent>
-
-          <TabsContent value="users">
-            <Card>
-              <CardHeader>
-                <CardTitle>All Users</CardTitle>
-                <CardDescription>View and manage all users in the system</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Email</TableHead>
-                      <TableHead>User ID</TableHead>
-                      <TableHead>Created At</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {users.map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell className="font-mono text-xs">{user.id}</TableCell>
-                        <TableCell>{new Date(user.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => deleteUser(user.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="quotes">
-            <QuoteRequestsManager />
-          </TabsContent>
-
-          <TabsContent value="certifications">
-            <CertRequestsManager />
-          </TabsContent>
-
-          <TabsContent value="members">
-            <Card>
-              <CardHeader>
-                <CardTitle>Organization Members</CardTitle>
-                <CardDescription>View and manage organization memberships and roles</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>User Email</TableHead>
-                      <TableHead>Organization</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Joined</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orgMembers.map((member: any) => (
-                      <TableRow key={member.id}>
-                        <TableCell>{member.profiles?.email || 'N/A'}</TableCell>
-                        <TableCell>{member.organisations?.name || 'N/A'}</TableCell>
-                        <TableCell>
-                          <Badge variant={member.role === 'admin' ? 'default' : 'secondary'}>
-                            {member.role}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>{new Date(member.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => updateMemberRole(member.id, 'admin')}
-                              disabled={member.role === 'admin'}
-                            >
-                              Admin
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => updateMemberRole(member.id, 'member')}
-                              disabled={member.role === 'member'}
-                            >
-                              Member
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {currentOrg && (
-            <TabsContent value="org-admin">
-              <OrgMembersManager 
-                orgId={currentOrg.id} 
-                orgName={currentOrg.name}
-                currentUserId={currentUserId}
-              />
-            </TabsContent>
-          )}
-        </Tabs>
+      {/* Main Content */}
+      <main className="flex-1 overflow-auto">
+        <div className="container mx-auto py-8 px-6">
+          {renderContent()}
+        </div>
       </main>
     </div>
   );

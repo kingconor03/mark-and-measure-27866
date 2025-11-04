@@ -775,6 +775,15 @@ export type Database = {
         Returns: boolean
       }
       is_platform_admin: { Args: { _user_id: string }; Returns: boolean }
+      list_members_with_email: {
+        Args: { p_org: string }
+        Returns: {
+          created_at: string
+          email: string
+          role: string
+          user_id: string
+        }[]
+      }
       platform_org_id: { Args: never; Returns: string }
       sidebar_counts_for_me: { Args: never; Returns: Json }
       user_org_ids: {

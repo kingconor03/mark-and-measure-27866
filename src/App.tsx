@@ -12,6 +12,8 @@ import Processing from "./pages/Processing";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import CreateOrganization from "./pages/CreateOrganization";
+import Quotes from "./pages/Quotes";
+import Certifications from "./pages/Certifications";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -59,6 +61,16 @@ const App = () => (
             <Route path="/admin" element={
               <ProtectedRoute>
                 <Admin />
+              </ProtectedRoute>
+            } />
+            <Route path="/quotes" element={
+              <ProtectedRoute>
+                <Quotes />
+              </ProtectedRoute>
+            } />
+            <Route path="/certifications" element={
+              <ProtectedRoute>
+                <Certifications />
               </ProtectedRoute>
             } />
             

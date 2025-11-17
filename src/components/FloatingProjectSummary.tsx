@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { GripVertical, Settings } from "lucide-react";
+import { GripVertical, Settings, Pin, PinOff } from "lucide-react";
 import { PileColors } from "@/components/PileColorSettings";
 import { FootingColors } from "@/components/FootingColorSettings";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,6 +29,7 @@ export default function FloatingProjectSummary({ piles, footings, pileColors, fo
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isPrintMode, setIsPrintMode] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
   
   // Display preferences
   const [scale, setScale] = useState(1.0);
@@ -81,18 +82,26 @@ export default function FloatingProjectSummary({ piles, footings, pileColors, fo
     loadPreferences();
   }, [user]);
 
-  // Load saved position from localStorage
+  // Load saved position and pinned state from localStorage
   useEffect(() => {
     const savedPosition = localStorage.getItem("projectSummaryPosition");
     if (savedPosition) {
       setPosition(JSON.parse(savedPosition));
     }
+    const savedPinned = localStorage.getItem("projectSummaryPinned");
+    if (savedPinned) {
+      setIsPinned(JSON.parse(savedPinned));
+    }
   }, []);
 
-  // Save position to localStorage when it changes
+  // Save position and pinned state to localStorage when they change
   useEffect(() => {
     localStorage.setItem("projectSummaryPosition", JSON.stringify(position));
   }, [position]);
+
+  useEffect(() => {
+    localStorage.setItem("projectSummaryPinned", JSON.stringify(isPinned));
+  }, [isPinned]);
 
   // Listen for print mode events
   useEffect(() => {
@@ -238,6 +247,8 @@ export default function FloatingProjectSummary({ piles, footings, pileColors, fo
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Don't allow dragging when pinned
+    if (isPinned) return;
     setIsDragging(true);
     setDragOffset({
       x: e.clientX - position.x,
@@ -284,24 +295,39 @@ export default function FloatingProjectSummary({ piles, footings, pileColors, fo
         }}
       >
         <div
-          className="bg-primary text-primary-foreground px-4 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing rounded-t-lg"
+          className={`bg-primary text-primary-foreground px-4 py-2 flex items-center justify-between rounded-t-lg ${isPinned ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
           onMouseDown={handleMouseDown}
         >
           <div className="flex items-center gap-2">
-            <GripVertical className="h-4 w-4" />
+            {!isPinned && <GripVertical className="h-4 w-4" />}
             <h3 className="font-semibold text-sm">Project Summary</h3>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 hover:bg-primary-foreground/20"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSettingsOpen(true);
-            }}
-          >
-            <Settings className="h-3.5 w-3.5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 hover:bg-primary-foreground/20"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsPinned(!isPinned);
+                toast.success(isPinned ? "Summary unpinned" : "Summary pinned to viewport");
+              }}
+              title={isPinned ? "Unpin summary" : "Pin summary"}
+            >
+              {isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 hover:bg-primary-foreground/20"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSettingsOpen(true);
+              }}
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       
       <div className="p-4 space-y-3">

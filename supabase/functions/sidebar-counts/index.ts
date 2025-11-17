@@ -45,18 +45,11 @@ serve(async (req) => {
       );
     }
 
-    // Create service role client to call RPC with user ID
-    const svcClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
-    const { data, error } = await svcClient.rpc('sidebar_counts_for_user', { 
-      p_user: user.id 
-    });
+    // Call the RPC function that uses auth.uid() internally
+    const { data, error } = await supabaseClient.rpc('sidebar_counts_for_me');
 
     if (error) {
-      console.error('Error calling sidebar_counts_for_user:', error);
+      console.error('Error calling sidebar_counts_for_me:', error);
       return new Response(
         JSON.stringify({ error: error.message }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -64,7 +57,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify(data?.[0] ?? { kind: 'tenant', pending_quotes: 0, pending_certs: 0, certs_passed_2_weeks: 0 }),
+      JSON.stringify(data ?? {}),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

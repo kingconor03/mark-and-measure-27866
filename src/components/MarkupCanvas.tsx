@@ -1112,12 +1112,13 @@ export default function MarkupCanvas({
         // Update existing pile's visual properties (color, scale, number) but NOT position
         const color = pile.color || pileColors[pile.pile_type as keyof PileColors] || "#FF6400";
         const radius = (pile.radius || 15) * pileConfig.scale;
-        const fontSize = Math.max(12, 14 * pileConfig.scale);
+        const fontSize = 14 * pileConfig.scale;
+        const strokeWidth = 2 * pileConfig.scale;
         
         const circle = existingGroup.getObjects()[0] as Circle;
         const text = existingGroup.getObjects()[1] as FabricText;
         
-        circle.set({ radius, fill: color });
+        circle.set({ radius, fill: color, strokeWidth });
         text.set({ text: pile.number?.toString() || "?", fontSize });
         
         // Update custom data
@@ -1131,6 +1132,7 @@ export default function MarkupCanvas({
       // Use custom color if set, otherwise use pile type color
       const color = pile.color || pileColors[pile.pile_type as keyof PileColors] || "#FF6400";
       const radius = (pile.radius || 15) * pileConfig.scale;
+      const strokeWidth = 2 * pileConfig.scale;
       
       const circle = new Circle({
         left: 0,
@@ -1138,12 +1140,12 @@ export default function MarkupCanvas({
         radius: radius,
         fill: color,
         stroke: "#000000",
-        strokeWidth: 2,
+        strokeWidth: strokeWidth,
         originX: 'center',
         originY: 'center',
       });
 
-      const fontSize = Math.max(12, 14 * pileConfig.scale);
+      const fontSize = 14 * pileConfig.scale;
       const text = new FabricText(pile.number?.toString() || "?", {
         left: 0,
         top: 0,

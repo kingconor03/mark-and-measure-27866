@@ -234,8 +234,8 @@ serve(async (req) => {
         );
       }
     } else {
-      // Process all pages if none selected (fallback)
-      console.warn('No selectedPages provided or empty array, processing ALL pages (this should not happen for markup!)');
+      // If no pages selected, assume user wants to process all pages (initial project creation)
+      console.log('No selectedPages provided, processing ALL pages (initial project creation)');
       pagesToProcess = Array.from({ length: pageCount }, (_, i) => i + 1);
     }
     

@@ -99,7 +99,7 @@ export default function Editor() {
       if (projectError) throw projectError;
       setProject(projectData);
 
-      const ids = projectData?.selected_page_ids ?? [];
+      const ids = (projectData as any)?.selected_page_ids ?? [];
 
       let pagesQuery = supabase
         .from("pages")
@@ -120,7 +120,13 @@ export default function Editor() {
       let finalPages = pagesData || [];
       if (ids.length) {
         const order = new Map(ids.map((id: string, i: number) => [id, i]));
-        finalPages = [...finalPages].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+        finalPages = [...finalPages].sort((a, b) => {
+          const orderA = order.get(a.id);
+          const orderB = order.get(b.id);
+          const numA = typeof orderA === 'number' ? orderA : 0;
+          const numB = typeof orderB === 'number' ? orderB : 0;
+          return numA - numB;
+        });
       }
 
       setPages(finalPages);

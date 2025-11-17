@@ -38,38 +38,27 @@ export function useSidebarCounts() {
 
       if (error) throw error;
       
-      // Map the response to the expected format
-      const result = data as { kind: string; pending_quotes: number; pending_certs: number; certs_passed_2_weeks: number };
+      // The RPC returns different fields based on user type
+      const result = data as any;
       
-      if (result.kind === 'platform') {
-        // For platform admins, map to the expected fields
-        // Since the RPC returns aggregated counts, distribute them across the expected fields
-        // The sidebar sums quotes_new + quotes_awaiting_docs + quotes_in_progress
-        // So we'll put the total in quotes_new to make the sum work correctly
-        const quotesTotal = result.pending_quotes;
-        const certsTotal = result.pending_certs;
-        
+      // Check if this is a platform admin response (has quotes_new field)
+      if (result.quotes_new !== undefined) {
+        // Platform admin response
         setCounts({
           kind: 'platform',
-          pending_quotes: result.pending_quotes,
-          pending_certs: result.pending_certs,
-          certs_passed_2_weeks: result.certs_passed_2_weeks,
-          // Legacy compatibility - distribute totals for sidebar display
-          quotes_new: quotesTotal,
-          quotes_awaiting_docs: 0,
-          quotes_in_progress: 0,
-          certs_new: certsTotal,
-          certs_pending: 0,
-          certs_awaiting_docs: 0,
+          quotes_new: result.quotes_new || 0,
+          quotes_awaiting_docs: result.quotes_awaiting_docs || 0,
+          quotes_in_progress: result.quotes_in_progress || 0,
+          certs_new: result.certs_new || 0,
+          certs_pending: result.certs_pending || 0,
+          certs_awaiting_docs: result.certs_awaiting_docs || 0,
         });
       } else {
-        // For tenants, map to the expected fields
+        // Regular user response
         setCounts({
           kind: 'tenant',
-          pending_quotes: result.pending_quotes,
-          pending_certs: result.pending_certs,
-          my_quotes_pending: result.pending_quotes,
-          my_certs_pending: result.pending_certs,
+          my_quotes_pending: result.my_quotes_pending || 0,
+          my_certs_pending: result.my_certs_pending || 0,
         });
       }
     } catch (error) {

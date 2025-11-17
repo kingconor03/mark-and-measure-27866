@@ -27,7 +27,16 @@ serve(async (req) => {
       throw new Error('Unauthorized');
     }
 
-    const { projectId } = await req.json();
+    const body = await req.json();
+    const { projectId, selectedPages } = body;
+    
+    console.log('process-pdf received:', { 
+      projectId, 
+      selectedPages, 
+      selectedPagesType: typeof selectedPages,
+      selectedPagesLength: Array.isArray(selectedPages) ? selectedPages.length : 'not array',
+      bodyKeys: Object.keys(body)
+    });
 
     // Validate projectId format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -92,14 +101,19 @@ serve(async (req) => {
     if (project.organisation_id) {
       // Multi-tenant: org-assets bucket with org-{id} prefix
       bucket = 'org-assets';
-      const urlMatch = project.pdf_url.match(/org-assets\/(.+)/);
-      if (!urlMatch) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid PDF URL format' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      // pdf_url could be either "org-assets/path" or full URL
+      if (project.pdf_url.startsWith('org-assets/')) {
+        pdfPath = project.pdf_url.replace('org-assets/', '');
+      } else {
+        const urlMatch = project.pdf_url.match(/org-assets\/(.+)/);
+        if (!urlMatch) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid PDF URL format' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        pdfPath = urlMatch[1];
       }
-      pdfPath = urlMatch[1];
       
       // Validate org-scoped path
       const expectedPrefix = `org-${project.organisation_id}/projects/${projectId}/`;
@@ -190,45 +204,99 @@ serve(async (req) => {
     // Get the storage path for the PDF
     const storagePath = `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/${bucket}/${pdfPath}`;
 
-    // Create page records for each page in the PDF
+    // Determine which pages to process
+    let pagesToProcess: number[];
+    
+    console.log('Checking selectedPages:', {
+      selectedPages,
+      isArray: Array.isArray(selectedPages),
+      length: Array.isArray(selectedPages) ? selectedPages.length : 'not array',
+      pageCount
+    });
+    
+    if (selectedPages && Array.isArray(selectedPages) && selectedPages.length > 0) {
+      // Filter to only valid page numbers
+      pagesToProcess = selectedPages
+        .map((p: any) => {
+          const num = typeof p === 'number' ? p : parseInt(p, 10);
+          return num;
+        })
+        .filter((p: number) => !isNaN(p) && p >= 1 && p <= pageCount)
+        .sort((a, b) => a - b);
+      
+      console.log('Filtered pages to process:', pagesToProcess, 'from selected:', selectedPages);
+      
+      if (pagesToProcess.length === 0) {
+        console.error('No valid pages after filtering!', { selectedPages, pageCount });
+        return new Response(
+          JSON.stringify({ error: 'No valid pages selected' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      // Process all pages if none selected (fallback)
+      console.warn('No selectedPages provided or empty array, processing ALL pages (this should not happen for markup!)');
+      pagesToProcess = Array.from({ length: pageCount }, (_, i) => i + 1);
+    }
+    
+    console.log(`Will create ${pagesToProcess.length} page records:`, pagesToProcess);
+
+    // CRITICAL: Delete any existing pages for this project FIRST (to avoid duplicates)
+    // This must happen before we insert new pages
+    console.log('Deleting existing pages for project:', projectId);
+    const { data: deletedPages, error: deleteError } = await supabaseClient
+      .from('pages')
+      .delete()
+      .eq('project_id', projectId)
+      .select();
+    
+    if (deleteError) {
+      console.error('Error deleting existing pages:', deleteError);
+      // Continue anyway - might be first time, but log the error
+    } else {
+      console.log(`Deleted ${deletedPages?.length || 0} existing pages for project`);
+    }
+
+    // Create page records only for selected pages
     const pageRecords = [];
-    for (let i = 1; i <= pageCount; i++) {
+    for (const pageNum of pagesToProcess) {
       pageRecords.push({
         project_id: projectId,
-        page_number: i,
+        page_number: pageNum,
         image_url: storagePath
       });
     }
 
-    const { error: insertError } = await supabaseClient
+    console.log(`Inserting ${pageRecords.length} page records for page numbers:`, pagesToProcess);
+    const { data: insertedPages, error: insertError } = await supabaseClient
       .from('pages')
-      .insert(pageRecords);
+      .insert(pageRecords)
+      .select('id, page_number');
 
     if (insertError) {
       console.error('Error inserting pages:', insertError);
       throw insertError;
     }
+    
+    console.log(`Successfully created ${insertedPages?.length || 0} page records:`, 
+      insertedPages?.map(p => p.page_number).join(', '));
 
-    // Create asset record for the PDF
-    if (project.organisation_id) {
-      const { error: assetError } = await supabaseClient
-        .from('project_assets')
-        .insert({
-          project_id: projectId,
-          kind: 'pdf',
-          path: pdfPath,
-          meta: { page_count: pageCount }
-        });
+    // Save selected page IDs to the project
+    const selectedPageIds = insertedPages?.map(p => p.id) || [];
+    console.log(`Saving ${selectedPageIds.length} selected page IDs to project:`, selectedPageIds);
 
-      if (assetError) {
-        console.error('Error creating asset record:', assetError);
-      }
-    }
+    // Create asset record for the PDF (markup source) if it doesn't exist
+    // Only create if org project (legacy projects don't need this)
+    // Skip this insert - let frontend handle it to avoid duplicate/conflict issues
+    // The frontend already inserts project_assets when uploading files
 
-    // Update project status
+    // Update project status and save selected_page_ids
     const { error: updateError } = await supabaseClient
       .from('projects')
-      .update({ status: 'completed' })
+      .update({ 
+        status: 'completed',
+        selected_page_ids: selectedPageIds
+      })
       .eq('id', projectId);
 
     if (updateError) {
@@ -236,7 +304,7 @@ serve(async (req) => {
       throw updateError;
     }
 
-    console.log(`Successfully processed PDF for project ${projectId} with ${pageCount} pages`);
+    console.log(`Successfully processed PDF for project ${projectId}: ${pagesToProcess.length} of ${pageCount} pages selected`);
 
     return new Response(
       JSON.stringify({ success: true, pageCount }),

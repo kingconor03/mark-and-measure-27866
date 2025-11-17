@@ -35,10 +35,10 @@ serve(async (req) => {
       );
     }
 
-    // Verify the project belongs to the authenticated user
+    // Verify the project belongs to the authenticated user and get the PDF URL
     const { data: project, error: projectError } = await supabaseClient
       .from('projects')
-      .select('user_id, pdf_url')
+      .select('user_id, pdf_url, organisation_id')
       .eq('id', projectId)
       .single();
 
@@ -49,9 +49,26 @@ serve(async (req) => {
       );
     }
 
-    if (project.user_id !== user.id) {
+    // Check authorization: legacy user-owned or org member
+    let isAuthorized = false;
+    if (project.organisation_id) {
+      // Multi-tenant: check org membership
+      const { data: membership } = await supabaseClient
+        .from('organisation_members')
+        .select('id')
+        .eq('organisation_id', project.organisation_id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      isAuthorized = !!membership;
+    } else {
+      // Legacy: check direct ownership
+      isAuthorized = project.user_id === user.id;
+    }
+
+    if (!isAuthorized) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized access to project' }),
+        JSON.stringify({ error: 'Unauthorized: Project does not belong to user or their organization' }),
         { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -63,13 +80,68 @@ serve(async (req) => {
       );
     }
 
-    // Extract the path from the PDF URL
-    const pdfPath = project.pdf_url.split('/blueprints/')[1];
+    // Determine bucket and path based on org or legacy structure
+    let bucket: string;
+    let pdfPath: string;
+    
+    if (project.organisation_id) {
+      // Multi-tenant: org-assets bucket with org-{id} prefix
+      bucket = 'org-assets';
+      // pdf_url could be either "org-assets/path" or full URL
+      if (project.pdf_url.startsWith('org-assets/')) {
+        pdfPath = project.pdf_url.replace('org-assets/', '');
+      } else {
+        const urlMatch = project.pdf_url.match(/org-assets\/(.+)/);
+        if (!urlMatch) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid PDF URL format for organization project' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        pdfPath = urlMatch[1];
+      }
+      
+      // Validate org-scoped path
+      const expectedPrefix = `org-${project.organisation_id}/projects/${projectId}/`;
+      if (!pdfPath.startsWith(expectedPrefix)) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid PDF path for this organization and project' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      // Legacy: blueprints bucket with user_id prefix
+      bucket = 'blueprints';
+      const urlParts = project.pdf_url.split('/blueprints/');
+      if (urlParts.length !== 2) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid PDF URL format for legacy project' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      pdfPath = urlParts[1];
+      
+      const expectedPrefix = `${user.id}/${projectId}/`;
+      if (!pdfPath.startsWith(expectedPrefix)) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid PDF path for this user and project' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+    
+    // Additional path validation to prevent traversal
+    if (pdfPath.includes('..') || pdfPath.includes('//')) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid path detected' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Generate a signed URL valid for 1 hour
     const { data: signedUrlData, error: signedUrlError } = await supabaseClient
       .storage
-      .from('blueprints')
+      .from(bucket)
       .createSignedUrl(pdfPath, 3600);
 
     if (signedUrlError) {

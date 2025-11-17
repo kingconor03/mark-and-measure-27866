@@ -101,6 +101,7 @@ const Dashboard = () => {
                   name={project.name}
                   lastModified={`Updated ${new Date(project.updated_at).toLocaleDateString()}`}
                   status={project.status === 'completed' ? 'completed' : 'in-progress'}
+                  onDelete={fetchProjects}
                 />
               ))}
             </div>

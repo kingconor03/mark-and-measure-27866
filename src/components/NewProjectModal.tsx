@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOrganisation } from "@/hooks/useOrganisation";
 import { features } from "@/config/features";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { PDFPreviewSelector } from "@/components/PDFPreviewSelector";
 
 interface NewProjectModalProps {
   open: boolean;
@@ -24,7 +25,7 @@ interface NewProjectModalProps {
   onProjectCreated?: () => void;
 }
 
-type DocumentType = "engineering" | "soil_report" | "architectural";
+type DocumentType = "installation_details";
 
 interface UploadedDocument {
   type: DocumentType;
@@ -37,6 +38,8 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
   const [projectName, setProjectName] = useState("");
   const [documents, setDocuments] = useState<UploadedDocument[]>([]);
   const [selectedMarkupDoc, setSelectedMarkupDoc] = useState<string>("");
+  const [selectedPages, setSelectedPages] = useState<number[]>([]);
+  const [showPageSelector, setShowPageSelector] = useState(false);
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
   const { currentOrg } = useOrganisation();
@@ -55,21 +58,44 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
       return;
     }
 
-    // Remove existing document of same type
-    setDocuments(prev => [...prev.filter(d => d.type !== type), { type, file, label }]);
-    toast.success(`${label} uploaded`);
+    // For installation_details, allow multiple files
+    if (type === "installation_details") {
+      setDocuments(prev => [...prev, { type, file, label: `${label} - ${file.name}` }]);
+      toast.success(`${file.name} uploaded`);
+    } else {
+      // Remove existing document of same type
+      setDocuments(prev => [...prev.filter(d => d.type !== type), { type, file, label }]);
+      toast.success(`${label} uploaded`);
+    }
   };
 
-  const removeDocument = (type: DocumentType) => {
-    setDocuments(prev => prev.filter(d => d.type !== type));
-    if (selectedMarkupDoc === type) {
-      setSelectedMarkupDoc("");
+  const removeDocument = (type: DocumentType, index?: number) => {
+    if (type === "installation_details" && index !== undefined) {
+      // Remove specific file by index for installation_details
+      setDocuments(prev => {
+        const installationDocs = prev.filter(d => d.type === type);
+        const otherDocs = prev.filter(d => d.type !== type);
+        const updated = installationDocs.filter((_, i) => i !== index);
+        return [...otherDocs, ...updated];
+      });
+    } else {
+      // Remove all documents of this type
+      setDocuments(prev => prev.filter(d => d.type !== type));
+      if (selectedMarkupDoc === type) {
+        setSelectedMarkupDoc("");
+      }
     }
   };
 
   const handleFinish = async (action: "markup" | "quote") => {
-    if (!user || !currentOrg) {
-      toast.error("User or organization not found");
+    if (!user) {
+      toast.error("User not found. Please sign in.");
+      return;
+    }
+
+    // Quote requests require an organisation
+    if (action === "quote" && !currentOrg) {
+      toast.error("An organisation is required to request a quote. Please create or join an organisation first.");
       return;
     }
 
@@ -83,6 +109,13 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
       return;
     }
 
+    // For markup, ensure pages were selected
+    if (action === "markup" && selectedPages.length === 0) {
+      toast.error("Please select at least one page to mark up");
+      return;
+    }
+
+    console.log('handleFinish called with:', { action, selectedPages, selectedPagesLength: selectedPages.length });
     setLoading(true);
 
     try {
@@ -110,7 +143,7 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
       if (!session) throw new Error('No active session');
 
       // Upload all documents
-      const uploadedFiles: { type: DocumentType; path: string; fileName: string }[] = [];
+      const uploadedFiles: { type: DocumentType; path: string; fileName: string; markupPath?: string | null }[] = [];
       
       for (const doc of documents) {
         const formData = new FormData();
@@ -131,16 +164,40 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
         uploadedFiles.push({
           type: doc.type,
           path: uploadData.path,
-          fileName: doc.file.name
+          fileName: doc.file.name,
+          markupPath: uploadData.markupPath || null
         });
 
-        // Store in project_assets
-        await supabase.from("project_assets").insert({
+        // Store installation_details version in project_assets
+        // Note: document_type column must exist (run migration 20251106000003_fix_project_assets_schema.sql)
+        const { error: installAssetError } = await supabase.from("project_assets").insert({
           project_id: project.id,
           path: uploadData.path,
-          kind: "other",
+          kind: "pdf",
+          document_type: "installation_details",
           meta: { fileName: doc.file.name, label: doc.label, docType: doc.type }
         });
+
+        if (installAssetError) {
+          console.error('Error inserting installation_details asset:', installAssetError);
+          // Continue - this is not critical for the workflow
+        }
+
+        // If markup version exists, also store it
+        if (uploadData.markupPath) {
+          const { error: markupAssetError } = await supabase.from("project_assets").insert({
+            project_id: project.id,
+            path: uploadData.markupPath,
+            kind: "pdf",
+            document_type: "markup",
+            meta: { fileName: doc.file.name.replace(/\.pdf$/i, '_markup.pdf'), label: `${doc.label} (Markup)`, docType: doc.type }
+          });
+
+          if (markupAssetError) {
+            console.error('Error inserting markup asset:', markupAssetError);
+            // Continue - this is not critical for the workflow
+          }
+        }
       }
 
       if (action === "quote") {
@@ -164,36 +221,94 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
         
       } else {
         // Setup for markup - find the selected document
-        const markupDoc = uploadedFiles.find(f => f.type === selectedMarkupDoc);
+        // selectedMarkupDoc is now "installation_details-{index}" format
+        const selectedIndex = selectedMarkupDoc.includes('-') 
+          ? parseInt(selectedMarkupDoc.split('-').pop() || '0', 10)
+          : 0;
+        const installationDocs = uploadedFiles.filter(f => f.type === "installation_details");
+        const markupDoc = installationDocs[selectedIndex];
         if (!markupDoc) throw new Error("Markup document not found");
 
-        const pdfUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/blueprints/${markupDoc.path}`;
+        // Use markup version if available, otherwise use installation version
+        const pdfPathToUse = markupDoc.markupPath || markupDoc.path;
+        
+        // Store the path (not full URL) for org-assets, full URL for legacy blueprints
+        // The get-blueprint-url function will handle creating signed URLs
+        const bucket = project.organisation_id ? 'org-assets' : 'blueprints';
+        let pdfUrl: string;
+        
+        if (project.organisation_id) {
+          // For org-assets, store just the path - the function will create signed URLs
+          pdfUrl = `${bucket}/${pdfPathToUse}`;
+        } else {
+          // For legacy blueprints, store full public URL
+          pdfUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${bucket}/${pdfPathToUse}`;
+        }
 
         await supabase
           .from("projects")
           .update({ pdf_url: pdfUrl })
           .eq("id", project.id);
 
-        // Process PDF for markup
-        supabase.functions.invoke("process-pdf", {
-          body: { projectId: project.id }
-        }).catch(error => {
-          console.error("PDF processing error:", error);
+        // Process PDF for markup with selected pages
+        // CRITICAL: Capture selectedPages in a local variable BEFORE any async operations
+        const pagesToProcess = selectedPages && selectedPages.length > 0 ? [...selectedPages] : [];
+        console.log('Processing PDF - selectedPages state:', selectedPages, 'Length:', selectedPages?.length);
+        console.log('Processing PDF - pagesToProcess:', pagesToProcess, 'Length:', pagesToProcess.length);
+        
+        if (pagesToProcess.length === 0) {
+          toast.error("No pages selected. Please go back and select pages.");
+          setLoading(false);
+          return;
+        }
+        
+        // Get fresh session token
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (!currentSession) {
+          toast.error("Session expired. Please sign in again.");
+          setLoading(false);
+          return;
+        }
+        
+        console.log('Calling process-pdf with:', { projectId: project.id, selectedPages: pagesToProcess });
+        
+        const { data: processData, error: processError } = await supabase.functions.invoke("process-pdf", {
+          body: { 
+            projectId: project.id,
+            selectedPages: pagesToProcess // Use the captured copy
+          },
+          headers: {
+            Authorization: `Bearer ${currentSession.access_token}`
+          }
         });
+        
+        if (processError) {
+          console.error("PDF processing error:", processError);
+          toast.error("Failed to process PDF: " + (processError.message || "Unknown error"));
+          setLoading(false);
+          return;
+        }
+        
+        console.log('PDF processing response:', processData);
 
         toast.success("Project created! Processing PDF...");
-        resetForm();
+        
+        // Don't reset form until after navigation
         onOpenChange(false);
         
         if (onProjectCreated) onProjectCreated();
         
+        // Navigate first, then reset form
         navigate(`/processing/${project.id}`, { 
           state: { 
             projectName: project.name, 
             fileName: markupDoc.fileName,
-            totalPages: 0
+            totalPages: pagesToProcess.length // Use actual selected pages count
           } 
         });
+        
+        // Reset form after navigation
+        resetForm();
       }
 
     } catch (error: any) {
@@ -208,6 +323,8 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
     setProjectName("");
     setDocuments([]);
     setSelectedMarkupDoc("");
+    setSelectedPages([]);
+    setShowPageSelector(false);
   };
 
   const canProceedToStep2 = projectName.trim().length > 0;
@@ -215,67 +332,77 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
   const canFinish = selectedMarkupDoc !== "" || documents.length > 0;
 
   const DocumentUploadCard = ({ type, label }: { type: DocumentType; label: string }) => {
-    const uploaded = documents.find(d => d.type === type);
+    const uploadedFiles = documents.filter(d => d.type === type);
     
     return (
       <div className="border rounded-lg p-4">
         <div className="flex items-center justify-between mb-2">
           <Label className="text-sm font-medium">{label}</Label>
-          {uploaded && (
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
+          {uploadedFiles.length > 0 && (
+            <span className="text-xs text-muted-foreground">{uploadedFiles.length} file(s)</span>
           )}
         </div>
-        {uploaded ? (
-          <div className="flex items-center justify-between p-2 bg-muted rounded">
-            <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              <span className="text-sm truncate max-w-[200px]">{uploaded.file.name}</span>
-            </div>
-            <Button 
-              type="button" 
-              variant="ghost" 
-              size="sm"
-              onClick={() => removeDocument(type)}
-              disabled={loading}
-            >
-              Remove
-            </Button>
+        {uploadedFiles.length > 0 ? (
+          <div className="space-y-2">
+            {uploadedFiles.map((doc, index) => (
+              <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <FileText className="h-4 w-4 flex-shrink-0" />
+                  <span className="text-sm truncate">{doc.file.name}</span>
+                </div>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => removeDocument(type, index)}
+                  disabled={loading}
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
           </div>
-        ) : (
-          <div className="border-2 border-dashed rounded p-4 text-center">
-            <input
-              id={`upload-${type}`}
-              type="file"
-              accept=".pdf"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleDocumentUpload(type, label, file);
-              }}
-              className="hidden"
-              disabled={loading}
-            />
-            <label htmlFor={`upload-${type}`} className="cursor-pointer">
-              <Upload className="h-6 w-6 mx-auto mb-1 text-muted-foreground" />
-              <p className="text-xs text-muted-foreground">Upload PDF (max 50MB)</p>
-            </label>
-          </div>
-        )}
+        ) : null}
+        <div className="border-2 border-dashed rounded p-4 text-center mt-2">
+          <input
+            id={`upload-${type}`}
+            type="file"
+            accept=".pdf"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleDocumentUpload(type, label, file);
+              e.target.value = ''; // Reset input to allow same file to be selected again
+            }}
+            className="hidden"
+            disabled={loading}
+          />
+          <label htmlFor={`upload-${type}`} className="cursor-pointer">
+            <Upload className="h-6 w-6 mx-auto mb-1 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground">Upload PDF (max 50MB)</p>
+            {uploadedFiles.length > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">Click to add more files</p>
+            )}
+          </label>
+        </div>
       </div>
     );
   };
 
   return (
     <Dialog open={open} onOpenChange={(open) => {
-      if (!open) resetForm();
+      if (!open) {
+        // Only reset if we're closing, not during the flow
+        resetForm();
+      }
       onOpenChange(open);
     }}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New Project - Step {step} of 4</DialogTitle>
           <DialogDescription>
             {step === 1 && "Enter project details"}
             {step === 2 && "Upload project documents"}
-            {step === 3 && "Select document for markup"}
+            {step === 3 && showPageSelector ? "Select pages to mark up" : "Select document for markup"}
             {step === 4 && "Choose action"}
           </DialogDescription>
         </DialogHeader>
@@ -315,9 +442,7 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
           {/* Step 2: Upload Documents */}
           {step === 2 && (
             <div className="space-y-4">
-              <DocumentUploadCard type="engineering" label="Engineering Drawing" />
-              <DocumentUploadCard type="soil_report" label="Soil Report" />
-              <DocumentUploadCard type="architectural" label="Architectural Drawing" />
+              <DocumentUploadCard type="installation_details" label="Installation Details" />
               
               <div className="flex gap-3 justify-end">
                 <Button 
@@ -338,24 +463,28 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
           )}
 
           {/* Step 3: Select Markup Document */}
-          {step === 3 && (
+          {step === 3 && !showPageSelector && (
             <div className="space-y-4">
               <Label>Select document for markup tool</Label>
               <RadioGroup value={selectedMarkupDoc} onValueChange={setSelectedMarkupDoc}>
-                {documents.map((doc) => (
-                  <div key={doc.type} className="flex items-center space-x-2 border rounded p-3">
-                    <RadioGroupItem value={doc.type} id={doc.type} />
-                    <Label htmlFor={doc.type} className="flex-1 cursor-pointer">
-                      <div className="flex items-center gap-2">
-                        <FileText className="h-4 w-4" />
-                        <div>
-                          <p className="font-medium">{doc.label}</p>
-                          <p className="text-xs text-muted-foreground">{doc.file.name}</p>
+                {documents.map((doc, index) => {
+                  // Use index as value since we can have multiple installation_details files
+                  const value = `${doc.type}-${index}`;
+                  return (
+                    <div key={value} className="flex items-center space-x-2 border rounded p-3">
+                      <RadioGroupItem value={value} id={value} />
+                      <Label htmlFor={value} className="flex-1 cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          <div>
+                            <p className="font-medium">{doc.file.name}</p>
+                            <p className="text-xs text-muted-foreground">{doc.label}</p>
+                          </div>
                         </div>
-                      </div>
-                    </Label>
-                  </div>
-                ))}
+                      </Label>
+                    </div>
+                  );
+                })}
               </RadioGroup>
               
               <div className="flex gap-3 justify-end">
@@ -367,12 +496,53 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
                   Back
                 </Button>
                 <Button 
-                  onClick={() => setStep(4)}
+                  onClick={() => {
+                    if (selectedMarkupDoc) {
+                      setShowPageSelector(true);
+                    }
+                  }}
                   disabled={!selectedMarkupDoc}
                 >
                   Next
                 </Button>
               </div>
+            </div>
+          )}
+
+          {/* Step 3.5: PDF Preview and Page Selection */}
+          {step === 3 && showPageSelector && (
+            <div className="space-y-4">
+              <div>
+                <Label>Select pages to mark up</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {(() => {
+                    const selectedIndex = selectedMarkupDoc.includes('-') 
+                      ? parseInt(selectedMarkupDoc.split('-').pop() || '0', 10)
+                      : 0;
+                    const doc = documents[selectedIndex];
+                    return doc?.file.name || '';
+                  })()}
+                </p>
+              </div>
+              {selectedMarkupDoc && (
+                <PDFPreviewSelector
+                  file={(() => {
+                    const selectedIndex = selectedMarkupDoc.includes('-') 
+                      ? parseInt(selectedMarkupDoc.split('-').pop() || '0', 10)
+                      : 0;
+                    return documents[selectedIndex]?.file;
+                  })()}
+                  onPagesSelected={(pages) => {
+                    console.log('Selected pages:', pages); // Debug log
+                    setSelectedPages(pages);
+                    setShowPageSelector(false);
+                    setStep(4);
+                  }}
+                  onCancel={() => {
+                    setShowPageSelector(false);
+                  }}
+                />
+              )}
             </div>
           )}
 
@@ -385,14 +555,18 @@ export const NewProjectModal = ({ open, onOpenChange, onProjectCreated }: NewPro
               <div className="grid gap-3">
                 <Button
                   onClick={() => handleFinish("quote")}
-                  disabled={loading}
+                  disabled={loading || !currentOrg}
                   size="lg"
                   className="h-auto py-4"
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   <div className="text-left">
                     <p className="font-semibold">Request a Quote</p>
-                    <p className="text-xs opacity-80">Submit all documents for admin review</p>
+                    <p className="text-xs opacity-80">
+                      {!currentOrg 
+                        ? "An organisation is required to request a quote" 
+                        : "Submit all documents for admin review"}
+                    </p>
                   </div>
                 </Button>
                 <Button

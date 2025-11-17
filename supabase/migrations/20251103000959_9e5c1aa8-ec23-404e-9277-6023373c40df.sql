@@ -93,7 +93,7 @@ BEGIN
       'quotes_awaiting_docs', COUNT(*) FILTER (WHERE qr.status = 'awaiting_docs'),
       'quotes_in_progress', COUNT(*) FILTER (WHERE qr.status = 'in_progress'),
       'certs_new', COUNT(*) FILTER (WHERE cr.status = 'new'),
-      'certs_pending', COUNT(*) FILTER (WHERE cr.status = 'pending_review'),
+      'certs_pending', COUNT(*) FILTER (WHERE cr.status = 'in_progress'),
       'certs_awaiting_docs', COUNT(*) FILTER (WHERE cr.status = 'awaiting_docs')
     )
     INTO result
@@ -104,7 +104,7 @@ BEGIN
     -- Regular user sees their org's request counts
     SELECT jsonb_build_object(
       'my_quotes_pending', COUNT(*) FILTER (WHERE qr.status IN ('new', 'awaiting_docs', 'in_progress')),
-      'my_certs_pending', COUNT(*) FILTER (WHERE cr.status IN ('new', 'pending_review', 'awaiting_docs'))
+      'my_certs_pending', COUNT(*) FILTER (WHERE cr.status IN ('new', 'in_progress', 'awaiting_docs'))
     )
     INTO result
     FROM quote_requests qr

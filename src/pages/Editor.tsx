@@ -90,7 +90,6 @@ export default function Editor() {
 
   const fetchProjectData = async () => {
     try {
-      // Fetch project
       const { data: projectData, error: projectError } = await supabase
         .from("projects")
         .select("*")
@@ -100,20 +99,36 @@ export default function Editor() {
       if (projectError) throw projectError;
       setProject(projectData);
 
-      // Fetch pages
-      const { data: pagesData, error: pagesError } = await supabase
+      const ids = projectData?.selected_page_ids ?? [];
+
+      let pagesQuery = supabase
         .from("pages")
         .select("*")
         .eq("project_id", projectId)
         .order("page_number");
 
-      if (pagesError) throw pagesError;
-      setPages(pagesData || []);
+      if (ids.length) {
+        pagesQuery = supabase
+          .from("pages")
+          .select("*")
+          .in("id", ids);
+      }
 
-      // Fetch all piles and footings for all pages
-      if (pagesData && pagesData.length > 0) {
-        const pageIds = pagesData.map(p => p.id);
-        
+      const { data: pagesData, error: pagesError } = await pagesQuery;
+      if (pagesError) throw pagesError;
+
+      let finalPages = pagesData || [];
+      if (ids.length) {
+        const order = new Map(ids.map((id: string, i: number) => [id, i]));
+        finalPages = [...finalPages].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+      }
+
+      setPages(finalPages);
+      setCurrentPage(0);
+
+      if (finalPages.length) {
+        const pageIds = finalPages.map(p => p.id);
+
         const { data: pilesData } = await supabase
           .from("piles")
           .select("*")
@@ -125,20 +140,18 @@ export default function Editor() {
           .select("*")
           .in("page_id", pageIds);
 
-      setPiles(pilesData || []);
+        setPiles(pilesData || []);
         setFootings(footingsData || []);
-        
-        // Calculate next pile number across all pages
-        if (pilesData && pilesData.length > 0) {
-          const maxNumber = Math.max(...pilesData.map(p => p.number || 0));
-          setNextPileNumber(maxNumber + 1);
+
+        if (pilesData?.length) {
+          const maxNum = Math.max(...pilesData.map(p => p.number || 0));
+          setNextPileNumber(maxNum + 1);
         }
-        
-        // Clear history to prevent zombie footings on undo
+
         clearHistory();
       }
-    } catch (error: any) {
-      logger.error("Error fetching project:", error);
+    } catch (err) {
+      logger.error("Error fetching project:", err);
       toast.error("Failed to load project");
     } finally {
       setLoading(false);

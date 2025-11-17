@@ -155,7 +155,7 @@ export default function Admin() {
         return <CertRequestsManager />;
 
       case "certs-pending":
-        return <CertRequestsManager defaultStatus="pending_review" />;
+        return <CertRequestsManager defaultStatus="in_progress" />;
 
       case "certs-approved":
         return <CertRequestsManager defaultStatus="approved" />;

@@ -81,6 +81,10 @@ export default function MarkupCanvas({
   const [pageCache, setPageCache] = useState<Map<string, any>>(new Map());
   const { session } = useAuth();
   
+  // Cache PDF document to avoid reloading it for each page
+  const pdfDocCacheRef = useRef<Map<string, any>>(new Map());
+  const signedUrlCacheRef = useRef<Map<string, string>>(new Map());
+  
   // Use ref to always have latest piles array (avoid stale closure)
   const pilesRef = useRef(piles);
   const renderedPilesRef = useRef<Map<string, Group>>(new Map());
@@ -512,20 +516,26 @@ export default function MarkupCanvas({
   }, [fabricCanvas, activeTool]);
 
   // Load only the current page with caching and pre-loading
+  // Use a ref to track if we're already loading to prevent race conditions
+  const loadingRef = useRef<boolean>(false);
+  const currentPageIdRef = useRef<string | null>(null);
+  
   useEffect(() => {
     if (!fabricCanvas || !currentPage || !containerRef.current) return;
-
-    const loadCurrentPage = async () => {
-      try {
-        // Check if page is already cached
-        if (pageCache.has(currentPage.id)) {
-          const cachedData = pageCache.get(currentPage.id);
-          
-          // Clear canvas and re-add cached image
-          fabricCanvas.clear();
-          renderedPilesRef.current.clear();
-          
-          const img = await FabricImage.fromURL(cachedData.dataUrl);
+    
+    // Skip if already loading the same page
+    if (loadingRef.current && currentPageIdRef.current === currentPage.id) return;
+    
+    // If page is cached, load it instantly from dataUrl (FabricImage objects can't be reliably cached)
+    if (pageCache.has(currentPage.id)) {
+      const cachedData = pageCache.get(currentPage.id);
+      if (cachedData.dataUrl) {
+        // Instant load from cached dataUrl (very fast, no network request)
+        const oldImages = fabricCanvas.getObjects().filter((obj: any) => obj.customData?.type === 'page');
+        oldImages.forEach((img: any) => fabricCanvas.remove(img));
+        
+        // Create image from cached dataUrl - this is fast since it's already in memory
+        FabricImage.fromURL(cachedData.dataUrl).then((img) => {
           img.scale(cachedData.scale);
           img.set({
             left: cachedData.left,
@@ -536,7 +546,7 @@ export default function MarkupCanvas({
           
           (img as any).customData = { type: 'page', pageId: currentPage.id };
           fabricCanvas.add(img);
-          fabricCanvas.sendObjectToBack(img); // Keep page image behind markups
+          fabricCanvas.sendObjectToBack(img);
           
           fabricCanvas.setWidth(cachedData.canvasWidth);
           fabricCanvas.setHeight(cachedData.canvasHeight);
@@ -548,13 +558,22 @@ export default function MarkupCanvas({
           });
           
           fabricCanvas.renderAll();
-          
-          // Pre-load adjacent pages in the background
-          preloadAdjacentPages();
-          return;
-        }
+        }).catch((error) => {
+          logger.error('Error loading cached image:', error);
+          // Fall through to async loading
+        });
+        
+        // Return early - image will load from cache
+        return;
+      }
+    }
 
-        // Show loading state (could add a spinner overlay here)
+    loadingRef.current = true;
+    currentPageIdRef.current = currentPage.id;
+
+    const loadCurrentPage = async () => {
+      try {
+        // This should already be handled above, but if we get here, load the page
         
         // Load and cache new page
         // Fetch signed URL for the blueprint since bucket is now private
@@ -573,18 +592,38 @@ export default function MarkupCanvas({
           return;
         }
 
-        const { data: signedUrlData, error: signedUrlError } = await supabase.functions.invoke("get-blueprint-url", {
-          body: { projectId }
-        });
+        // Get or cache signed URL
+        let signedUrl = signedUrlCacheRef.current.get(projectId);
+        if (!signedUrl) {
+          const { data: signedUrlData, error: signedUrlError } = await supabase.functions.invoke("get-blueprint-url", {
+            body: { projectId }
+          });
 
-        if (signedUrlError || !signedUrlData?.signedUrl) {
-          logger.error('Error fetching signed URL:', signedUrlError);
-          toast.error('Failed to load blueprint');
-          return;
+          if (signedUrlError || !signedUrlData?.signedUrl) {
+            logger.error('Error fetching signed URL:', signedUrlError);
+            toast.error('Failed to load blueprint');
+            return;
+          }
+          signedUrl = signedUrlData.signedUrl;
+          signedUrlCacheRef.current.set(projectId, signedUrl);
         }
 
-        const loadingTask = pdfjsLib.getDocument(signedUrlData.signedUrl);
-        const pdf = await loadingTask.promise;
+        // Get or cache PDF document
+        let pdf = pdfDocCacheRef.current.get(projectId);
+        if (!pdf) {
+          const loadingTask = pdfjsLib.getDocument({ url: signedUrl });
+          pdf = await loadingTask.promise;
+          pdfDocCacheRef.current.set(projectId, pdf);
+        }
+        
+        // Validate page number exists in PDF
+        const numPages = pdf.numPages;
+        if (currentPage.page_number < 1 || currentPage.page_number > numPages) {
+          logger.error(`Page number ${currentPage.page_number} is out of range. PDF has ${numPages} pages.`);
+          toast.error(`Failed to load page ${currentPage.page_number}`);
+          return;
+        }
+        
         const pdfPage = await pdf.getPage(currentPage.page_number);
         
         const viewport = pdfPage.getViewport({ scale: 3 });
@@ -630,11 +669,13 @@ export default function MarkupCanvas({
 
         (img as any).customData = { type: 'page', pageId: currentPage.id };
 
-        // Clear canvas before adding
-        fabricCanvas.clear();
-        renderedPilesRef.current.clear();
+        // Instant swap - remove old, add new immediately (no animations to avoid delays)
+        const oldImages = fabricCanvas.getObjects().filter((obj: any) => obj.customData?.type === 'page');
+        oldImages.forEach((oldImg: any) => fabricCanvas.remove(oldImg));
+        
+        // Add new image immediately
         fabricCanvas.add(img);
-        fabricCanvas.sendObjectToBack(img); // Keep page image behind markups
+        fabricCanvas.sendObjectToBack(img);
         
         // Set canvas size
         const canvasWidth = containerWidth;
@@ -643,10 +684,11 @@ export default function MarkupCanvas({
         fabricCanvas.setWidth(canvasWidth);
         fabricCanvas.setHeight(canvasHeight);
         
-        // Cache the page data
+        // Cache the page data including the FabricImage for instant loading
         const newCache = new Map(pageCache);
         newCache.set(currentPage.id, {
           dataUrl,
+          // Don't cache fabricImage - use dataUrl instead (it's fast enough)
           scale,
           left,
           top,
@@ -665,83 +707,112 @@ export default function MarkupCanvas({
 
         fabricCanvas.renderAll();
         
-        // Pre-load adjacent pages in the background
-        preloadAdjacentPages();
+        // Pre-load adjacent pages in the background (non-blocking)
+        setTimeout(() => preloadAdjacentPages(), 100);
       } catch (error) {
         logger.error('Error loading page:', error);
         toast.error('Failed to load page');
+      } finally {
+        loadingRef.current = false;
       }
     };
+    
+    loadCurrentPage();
 
-    // Pre-load adjacent pages (N-1 and N+1)
-    const preloadAdjacentPages = async () => {
-      const adjacentPages = [
-        pages[currentPageIndex - 1],
-        pages[currentPageIndex + 1],
-      ].filter(Boolean);
+    return () => {
+      loadingRef.current = false;
+    };
+  }, [fabricCanvas, currentPage?.id, containerRef.current]);
+  
+  // Pre-load adjacent pages (N-1 and N+1) - separate function
+  const preloadAdjacentPages = async () => {
+    const adjacentPages = [
+      pages[currentPageIndex - 1],
+      pages[currentPageIndex + 1],
+    ].filter(Boolean);
 
-      for (const adjacentPage of adjacentPages) {
-        if (pageCache.has(adjacentPage.id)) continue; // Already cached
+    for (const adjacentPage of adjacentPages) {
+      if (pageCache.has(adjacentPage.id)) continue; // Already cached
 
-        try {
-          const projectId = adjacentPage.project_id;
-          if (!projectId) continue;
+      try {
+        const projectId = adjacentPage.project_id;
+        if (!projectId) continue;
 
-          // Skip if no active session
-          if (!session) continue;
+        // Skip if no active session
+        if (!session) continue;
 
+        // Get or cache signed URL
+        let signedUrl = signedUrlCacheRef.current.get(projectId);
+        if (!signedUrl) {
           const { data: signedUrlData, error: signedUrlError } = await supabase.functions.invoke("get-blueprint-url", {
             body: { projectId }
           });
-
           if (signedUrlError || !signedUrlData?.signedUrl) continue;
+          signedUrl = signedUrlData.signedUrl;
+          signedUrlCacheRef.current.set(projectId, signedUrl);
+        }
 
-          const loadingTask = pdfjsLib.getDocument(signedUrlData.signedUrl);
-          const pdf = await loadingTask.promise;
-          const pdfPage = await pdf.getPage(adjacentPage.page_number);
-          
-          const viewport = pdfPage.getViewport({ scale: 3 });
-          const tempCanvas = document.createElement('canvas');
-          const context = tempCanvas.getContext('2d');
-          
-          if (!context) continue;
+        // Get or cache PDF document
+        let pdf = pdfDocCacheRef.current.get(projectId);
+        if (!pdf) {
+          const loadingTask = pdfjsLib.getDocument(signedUrl);
+          pdf = await loadingTask.promise;
+          pdfDocCacheRef.current.set(projectId, pdf);
+        }
+        
+        const pdfPage = await pdf.getPage(adjacentPage.page_number);
+        
+        const viewport = pdfPage.getViewport({ scale: 3 });
+        const tempCanvas = document.createElement('canvas');
+        const context = tempCanvas.getContext('2d');
+        
+        if (!context) continue;
 
-          tempCanvas.height = viewport.height;
-          tempCanvas.width = viewport.width;
+        tempCanvas.height = viewport.height;
+        tempCanvas.width = viewport.width;
 
-          await pdfPage.render({
-            canvasContext: context,
-            viewport: viewport,
-          } as any).promise;
+        await pdfPage.render({
+          canvasContext: context,
+          viewport: viewport,
+        } as any).promise;
 
-          const dataUrl = tempCanvas.toDataURL('image/png');
-          
-          if (!containerRef.current) continue;
-          
-          const container = containerRef.current;
-          const containerWidth = container.clientWidth;
-          const containerHeight = container.clientHeight;
+        const dataUrl = tempCanvas.toDataURL('image/png');
+        
+        if (!containerRef.current) continue;
+        
+        const container = containerRef.current;
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
 
-          const img = await FabricImage.fromURL(dataUrl);
-          const scale = Math.min(
-            containerWidth / img.width!,
-            containerHeight / img.height!,
-            1
-          ) * 0.95;
-          
-          const scaledWidth = img.width! * scale;
-          const scaledHeight = img.height! * scale;
-          
-          const left = (containerWidth - scaledWidth) / 2;
-          const top = 20;
-          
-          const canvasWidth = containerWidth;
-          const canvasHeight = scaledHeight + 40;
-          
-          // Cache the pre-loaded page
+        const img = await FabricImage.fromURL(dataUrl);
+        const scale = Math.min(
+          containerWidth / img.width!,
+          containerHeight / img.height!,
+          1
+        ) * 0.95;
+        
+        const scaledWidth = img.width! * scale;
+        const scaledHeight = img.height! * scale;
+        
+        const left = (containerWidth - scaledWidth) / 2;
+        const top = 20;
+        
+        img.scale(scale);
+        img.set({
+          left,
+          top,
+          selectable: false,
+          evented: false,
+        });
+        (img as any).customData = { type: 'page', pageId: adjacentPage.id };
+        
+        const canvasWidth = containerWidth;
+        const canvasHeight = scaledHeight + 40;
+        
+          // Cache the pre-loaded page (dataUrl for fast loading)
           const newCache = new Map(pageCache);
           newCache.set(adjacentPage.id, {
-            dataUrl,
+            dataUrl, // Cache dataUrl - loading from this is very fast
             scale,
             left,
             top,
@@ -751,15 +822,20 @@ export default function MarkupCanvas({
             height: scaledHeight,
           });
           setPageCache(newCache);
-        } catch (error) {
-          logger.error('Error pre-loading page:', error);
-          // Silently fail pre-loading
-        }
+      } catch (error) {
+        logger.error('Error pre-loading page:', error);
+        // Silently fail pre-loading
       }
-    };
-
-    loadCurrentPage();
-  }, [fabricCanvas, currentPageIndex, currentPage, pageCache]);
+    }
+  };
+  
+  // Trigger preload when page changes
+  useEffect(() => {
+    if (!fabricCanvas || !currentPage) return;
+    // Pre-load adjacent pages in the background after a short delay
+    const timeoutId = setTimeout(() => preloadAdjacentPages(), 200);
+    return () => clearTimeout(timeoutId);
+  }, [currentPageIndex, currentPage?.id]);
 
   // Handle canvas clicks and drawing for pile and footing placement
   useEffect(() => {

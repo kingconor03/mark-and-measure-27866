@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Editor from "./pages/Editor";
 import Processing from "./pages/Processing";
+import ProjectFolderView from "./pages/ProjectFolderView";
 import Settings from "./pages/Settings";
 import Admin from "./pages/Admin";
 import CreateOrganization from "./pages/CreateOrganization";
@@ -41,6 +42,11 @@ const App = () => (
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } />
+            <Route path="/project/:projectId" element={
+              <ProtectedRoute>
+                <ProjectFolderView />
               </ProtectedRoute>
             } />
             <Route path="/editor/:projectId" element={

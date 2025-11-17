@@ -498,25 +498,31 @@ export type Database = {
       project_assets: {
         Row: {
           created_at: string
+          document_type: string | null
           id: string
           kind: Database["public"]["Enums"]["asset_kind"]
           meta: Json | null
+          page_number: number | null
           path: string
           project_id: string
         }
         Insert: {
           created_at?: string
+          document_type?: string | null
           id?: string
           kind: Database["public"]["Enums"]["asset_kind"]
           meta?: Json | null
+          page_number?: number | null
           path: string
           project_id: string
         }
         Update: {
           created_at?: string
+          document_type?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["asset_kind"]
           meta?: Json | null
+          page_number?: number | null
           path?: string
           project_id?: string
         }
@@ -538,6 +544,7 @@ export type Database = {
           name: string
           organisation_id: string | null
           pdf_url: string | null
+          selected_page_ids: string[] | null
           status: string | null
           updated_at: string | null
           user_id: string
@@ -549,6 +556,7 @@ export type Database = {
           name: string
           organisation_id?: string | null
           pdf_url?: string | null
+          selected_page_ids?: string[] | null
           status?: string | null
           updated_at?: string | null
           user_id: string
@@ -560,6 +568,7 @@ export type Database = {
           name?: string
           organisation_id?: string | null
           pdf_url?: string | null
+          selected_page_ids?: string[] | null
           status?: string | null
           updated_at?: string | null
           user_id?: string

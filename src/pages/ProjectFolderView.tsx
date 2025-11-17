@@ -90,7 +90,7 @@ export default function ProjectFolderView() {
       if (assetsError) throw assetsError;
       
       // Process assets - map old document types to installation_details
-      const processedAssets = (assetsData || []).map((asset) => {
+      const processedAssets = (assetsData || []).map((asset: any) => {
         // Convert old document types to installation_details
         if (asset.document_type && 
             (asset.document_type === "soil_report" || 

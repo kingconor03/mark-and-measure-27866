@@ -30,6 +30,11 @@ export default function FloatingProjectSummary({ piles, footings, pileColors, fo
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
+  const [pinnedCanvasCoords, setPinnedCanvasCoords] = useState<{ x: number; y: number } | null>(null);
+  const [canvasTransform, setCanvasTransform] = useState<{ zoom: number; viewportTransform: number[] }>({ 
+    zoom: 1, 
+    viewportTransform: [1, 0, 0, 1, 0, 0] 
+  });
   
   // Display preferences
   const [scale, setScale] = useState(1.0);
@@ -102,6 +107,33 @@ export default function FloatingProjectSummary({ piles, footings, pileColors, fo
   useEffect(() => {
     localStorage.setItem("projectSummaryPinned", JSON.stringify(isPinned));
   }, [isPinned]);
+
+  // Listen for canvas transform changes
+  useEffect(() => {
+    const handleTransformChange = (e: CustomEvent) => {
+      setCanvasTransform({
+        zoom: e.detail.zoom,
+        viewportTransform: e.detail.viewportTransform
+      });
+    };
+
+    window.addEventListener('canvas-transform-change', handleTransformChange as EventListener);
+    return () => {
+      window.removeEventListener('canvas-transform-change', handleTransformChange as EventListener);
+    };
+  }, []);
+
+  // Update position when pinned and canvas transform changes
+  useEffect(() => {
+    if (isPinned && pinnedCanvasCoords) {
+      // Convert canvas coordinates to screen coordinates
+      const vt = canvasTransform.viewportTransform;
+      const zoom = canvasTransform.zoom;
+      const screenX = pinnedCanvasCoords.x * zoom + vt[4];
+      const screenY = pinnedCanvasCoords.y * zoom + vt[5];
+      setPosition({ x: screenX, y: screenY });
+    }
+  }, [isPinned, pinnedCanvasCoords, canvasTransform]);
 
   // Listen for print mode events
   useEffect(() => {
@@ -249,6 +281,8 @@ export default function FloatingProjectSummary({ piles, footings, pileColors, fo
   const handleMouseDown = (e: React.MouseEvent) => {
     // Don't allow dragging when pinned
     if (isPinned) return;
+    if ((e.target as HTMLElement).closest('button, input, select, .popover-trigger')) return;
+    
     setIsDragging(true);
     setDragOffset({
       x: e.clientX - position.x,
@@ -309,8 +343,21 @@ export default function FloatingProjectSummary({ piles, footings, pileColors, fo
               className="h-6 w-6 hover:bg-primary-foreground/20"
               onClick={(e) => {
                 e.stopPropagation();
-                setIsPinned(!isPinned);
-                toast.success(isPinned ? "Summary unpinned" : "Summary pinned to viewport");
+                if (!isPinned) {
+                  // Pinning: convert screen coordinates to canvas coordinates
+                  const vt = canvasTransform.viewportTransform;
+                  const zoom = canvasTransform.zoom;
+                  const canvasX = (position.x - vt[4]) / zoom;
+                  const canvasY = (position.y - vt[5]) / zoom;
+                  setPinnedCanvasCoords({ x: canvasX, y: canvasY });
+                  setIsPinned(true);
+                  toast("Summary box pinned to PDF - it will now move and scale with the canvas");
+                } else {
+                  // Unpinning: keep current screen position
+                  setPinnedCanvasCoords(null);
+                  setIsPinned(false);
+                  toast("Summary box unpinned - you can now move it freely");
+                }
               }}
               title={isPinned ? "Unpin summary" : "Pin summary"}
             >

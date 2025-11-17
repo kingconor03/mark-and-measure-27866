@@ -79,7 +79,6 @@ export default function MarkupCanvas({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selectedIds: string[] } | null>(null);
   const [currentPageData, setCurrentPageData] = useState<{ pageId: string; width: number; height: number } | null>(null);
   const [pageCache, setPageCache] = useState<Map<string, any>>(new Map());
-  const [canvasZoom, setCanvasZoom] = useState(1);
   const { session } = useAuth();
   
   // Cache PDF document to avoid reloading it for each page
@@ -310,6 +309,15 @@ export default function MarkupCanvas({
         
         lastPosX = evt.clientX;
         lastPosY = evt.clientY;
+        
+        // Dispatch event with zoom and transform for summary box
+        window.dispatchEvent(new CustomEvent('canvas-transform-change', {
+          detail: {
+            zoom: canvas.getZoom(),
+            viewportTransform: canvas.viewportTransform
+          }
+        }));
+        
         canvas.requestRenderAll();
       }
     });
@@ -362,13 +370,30 @@ export default function MarkupCanvas({
         // Zoom to mouse cursor position
         const pointer = canvas.getViewportPoint(e as any);
         canvas.zoomToPoint(pointer, zoom);
-        setCanvasZoom(zoom);
+        
+        // Dispatch event with zoom and transform for summary box
+        window.dispatchEvent(new CustomEvent('canvas-transform-change', {
+          detail: {
+            zoom: canvas.getZoom(),
+            viewportTransform: canvas.viewportTransform
+          }
+        }));
+        
         canvas.requestRenderAll();
       } else {
         // Normal scroll - pan vertically
         if (canvas.viewportTransform) {
           canvas.viewportTransform[5] -= e.deltaY;
           canvas.viewportTransform[4] -= e.deltaX; // Horizontal scroll
+          
+          // Dispatch event with zoom and transform for summary box
+          window.dispatchEvent(new CustomEvent('canvas-transform-change', {
+            detail: {
+              zoom: canvas.getZoom(),
+              viewportTransform: canvas.viewportTransform
+            }
+          }));
+          
           canvas.requestRenderAll();
         }
       }
@@ -1231,36 +1256,9 @@ export default function MarkupCanvas({
     fabricCanvas.renderAll();
   }, [fabricCanvas, footings, currentPageIndex, currentPageData, footingConfig.opacity, footingColors]);
 
-  // Handle zoom slider change
-  const handleZoomChange = (value: number) => {
-    if (!fabricCanvas) return;
-    const zoom = value / 100;
-    // Use setZoom instead of zoomToPoint for slider control
-    fabricCanvas.setZoom(zoom);
-    setCanvasZoom(zoom);
-    fabricCanvas.requestRenderAll();
-  };
-
   return (
     <div ref={containerRef} className="relative w-full h-full flex items-center justify-center overflow-hidden" style={{ cursor: 'auto' }}>
       <canvas ref={canvasRef} className="border border-border rounded shadow-lg" style={{ cursor: 'inherit' }} />
-      
-      {/* Zoom Control */}
-      <div className="absolute bottom-4 right-4 bg-card/95 backdrop-blur-sm border rounded-lg p-3 shadow-lg z-10">
-        <div className="flex items-center gap-3 min-w-[200px]">
-          <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">
-            Zoom: {Math.round(canvasZoom * 100)}%
-          </span>
-          <input
-            type="range"
-            min="10"
-            max="200"
-            value={canvasZoom * 100}
-            onChange={(e) => handleZoomChange(Number(e.target.value))}
-            className="flex-1 h-2 bg-secondary rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
-          />
-        </div>
-      </div>
       
       {contextMenu && (
         <PileContextMenu

@@ -196,15 +196,18 @@ export default function PileToolSettings({
       </div>
 
       <div className="space-y-2">
-        <Label>Scale</Label>
-        <Input
-          type="number"
-          value={scale}
-          onChange={(e) => onScaleChange(parseFloat(e.target.value) || 1)}
-          min={0.5}
-          max={3}
-          step={0.1}
+        <Label>Marker Size: {Math.round(scale * 100)}%</Label>
+        <input
+          type="range"
+          min="10"
+          max="200"
+          value={scale * 100}
+          onChange={(e) => onScaleChange(Number(e.target.value) / 100)}
+          className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-primary [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:cursor-pointer"
         />
+        <p className="text-xs text-muted-foreground">
+          Adjust the size of pile markers on the canvas
+        </p>
       </div>
     </div>
   );

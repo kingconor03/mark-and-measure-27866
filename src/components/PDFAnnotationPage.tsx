@@ -32,24 +32,40 @@ export function PDFAnnotationPage({
 
   // Render the PDF page
   useEffect(() => {
-    if (!canvasRef.current || !pdfPage) return;
+    if (!canvasRef.current || !pdfPage) {
+      console.log(`⚠️ Page ${pageNumber}: Missing canvas or pdfPage`, { 
+        hasCanvas: !!canvasRef.current, 
+        hasPdfPage: !!pdfPage 
+      });
+      return;
+    }
 
     const render = async () => {
       try {
+        console.log(`🎨 Rendering page ${pageNumber}...`);
         const viewport = pdfPage.getViewport({ scale: zoom });
         const canvas = canvasRef.current;
-        if (!canvas) return;
+        if (!canvas) {
+          console.error(`❌ Page ${pageNumber}: Canvas ref lost during render`);
+          return;
+        }
 
         const context = canvas.getContext("2d");
-        if (!context) return;
+        if (!context) {
+          console.error(`❌ Page ${pageNumber}: Failed to get 2D context`);
+          return;
+        }
 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
+        console.log(`📐 Page ${pageNumber} canvas dimensions: ${canvas.width}x${canvas.height}`);
 
         await pdfPage.render({
           canvasContext: context,
           viewport: viewport,
         }).promise;
+
+        console.log(`✅ Page ${pageNumber} rendered successfully`);
 
         // Update page geometry after rendering
         if (wrapperRef.current) {
@@ -65,12 +81,12 @@ export function PDFAnnotationPage({
           });
         }
       } catch (error) {
-        console.error("Error rendering PDF page:", error);
+        console.error(`❌ Error rendering PDF page ${pageNumber}:`, error);
       }
     };
 
     render();
-  }, [pdfPage, zoom]);
+  }, [pdfPage, zoom, pageNumber]);
 
   // Update page geometry on scroll/resize
   useEffect(() => {

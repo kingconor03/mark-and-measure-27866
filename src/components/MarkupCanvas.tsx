@@ -10,7 +10,10 @@ import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { PileColors } from "@/components/PileColorSettings";
 import PileContextMenu from "@/components/PileContextMenu";
 import { exportCanvasToPDF } from "@/lib/pdfExport";
+import { exportAnnotationsToPDF } from "@/lib/pdfExportNew";
 import { HistoryAction } from "@/hooks/useHistory";
+import { screenToAnnotation, annotationToScreen, getPageTransform, PageTransform, Annotation } from "@/lib/annotations";
+import { legacyPileToAnnotation, legacyFootingToAnnotation, annotationToLegacyPile, annotationToLegacyFooting } from "@/lib/annotationStore";
 
 // Configure PDF.js worker immediately when module loads
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -77,8 +80,15 @@ export default function MarkupCanvas({
   const [footingStart, setFootingStart] = useState<{ x: number; y: number } | null>(null);
   const [tempFootingRect, setTempFootingRect] = useState<Rect | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; selectedIds: string[] } | null>(null);
-  const [currentPageData, setCurrentPageData] = useState<{ pageId: string; width: number; height: number } | null>(null);
+  const [currentPageData, setCurrentPageData] = useState<{ 
+    pageId: string; 
+    width: number; 
+    height: number;
+    basePdfWidth: number; // PDF page width at base scale (scale 3)
+    basePdfHeight: number; // PDF page height at base scale (scale 3)
+  } | null>(null);
   const [pageCache, setPageCache] = useState<Map<string, any>>(new Map());
+  const [currentPageTransform, setCurrentPageTransform] = useState<PageTransform | null>(null);
   const { session } = useAuth();
   
   // Cache PDF document to avoid reloading it for each page
@@ -89,6 +99,32 @@ export default function MarkupCanvas({
   const pilesRef = useRef(piles);
   const renderedPilesRef = useRef<Map<string, Group>>(new Map());
   const lastClickRef = useRef<{ x: number; y: number; timestamp: number } | null>(null);
+  
+  // Helper to get page transform from fabric canvas and page image
+  const updatePageTransform = (canvas: FabricCanvas) => {
+    const pageImage = canvas.getObjects().find((obj: any) => obj.customData?.type === 'page') as any;
+    if (!pageImage || !currentPageData) {
+      setCurrentPageTransform(null);
+      return;
+    }
+    
+    const zoom = canvas.getZoom();
+    const bounds = pageImage.getBoundingRect();
+    
+    // Use base PDF dimensions stored when page was loaded
+    // These are the dimensions at scale 3 (base rendering scale)
+    const transform: PageTransform = {
+      pdfPageWidth: currentPageData.basePdfWidth,
+      pdfPageHeight: currentPageData.basePdfHeight,
+      offsetX: bounds.left,
+      offsetY: bounds.top,
+      zoom: zoom,
+      renderedWidth: bounds.width,
+      renderedHeight: bounds.height,
+    };
+    
+    setCurrentPageTransform(transform);
+  };
   
   useEffect(() => {
     pilesRef.current = piles;
@@ -318,6 +354,9 @@ export default function MarkupCanvas({
           }
         }));
         
+        // Update page transform after zoom
+        updatePageTransform(canvas);
+        
         canvas.requestRenderAll();
       }
     });
@@ -379,6 +418,9 @@ export default function MarkupCanvas({
           }
         }));
         
+        // Update page transform after zoom
+        updatePageTransform(canvas);
+        
         canvas.requestRenderAll();
       } else {
         // Normal scroll - pan vertically
@@ -393,6 +435,9 @@ export default function MarkupCanvas({
               viewportTransform: canvas.viewportTransform
             }
           }));
+          
+          // Update page transform after pan
+          updatePageTransform(canvas);
           
           canvas.requestRenderAll();
         }
@@ -604,6 +649,8 @@ export default function MarkupCanvas({
             pageId: currentPage.id,
             width: cachedData.width,
             height: cachedData.height,
+            basePdfWidth: cachedData.basePdfWidth || cachedData.width,
+            basePdfHeight: cachedData.basePdfHeight || cachedData.height,
           });
           
           fabricCanvas.renderAll();
@@ -676,6 +723,9 @@ export default function MarkupCanvas({
         const pdfPage = await pdf.getPage(currentPage.page_number);
         
         const viewport = pdfPage.getViewport({ scale: 3 });
+        const basePdfWidth = viewport.width; // Store base PDF width at scale 3
+        const basePdfHeight = viewport.height; // Store base PDF height at scale 3
+        
         const tempCanvas = document.createElement('canvas');
         const context = tempCanvas.getContext('2d');
         
@@ -737,7 +787,6 @@ export default function MarkupCanvas({
         const newCache = new Map(pageCache);
         newCache.set(currentPage.id, {
           dataUrl,
-          // Don't cache fabricImage - use dataUrl instead (it's fast enough)
           scale,
           left,
           top,
@@ -745,6 +794,8 @@ export default function MarkupCanvas({
           canvasHeight,
           width: scaledWidth,
           height: scaledHeight,
+          basePdfWidth,
+          basePdfHeight,
         });
         setPageCache(newCache);
         
@@ -752,7 +803,12 @@ export default function MarkupCanvas({
           pageId: currentPage.id,
           width: scaledWidth,
           height: scaledHeight,
+          basePdfWidth,
+          basePdfHeight,
         });
+        
+        // Update page transform after image is added
+        setTimeout(() => updatePageTransform(fabricCanvas), 0);
 
         fabricCanvas.renderAll();
         
@@ -912,8 +968,26 @@ export default function MarkupCanvas({
         // Update last click
         lastClickRef.current = { x: pointer.x, y: pointer.y, timestamp: now };
         
+        // Convert screen coordinates to normalized PDF coordinates
+        if (!currentPageTransform) {
+          toast.error("Page not fully loaded");
+          return;
+        }
+        
+        const normalizedCoords = screenToAnnotation(
+          pointer.x,
+          pointer.y,
+          currentPageTransform
+        );
+        
         // Determine color: use custom color if set, otherwise use default for pile type
         const pileColor = pileConfig.customColor || pileColors[pileConfig.pileType as keyof PileColors] || "#FF6400";
+        
+        // Calculate pixel position for backward compatibility (at base scale)
+        // Use the normalized coords to calculate position at base rendering scale
+        const baseScale = 3; // PDF is rendered at scale 3
+        const position_x = normalizedCoords.xNorm * currentPageTransform.pdfPageWidth;
+        const position_y = normalizedCoords.yNorm * currentPageTransform.pdfPageHeight;
         
         // Create temporary ID for optimistic update
         const tempId = `temp-${Date.now()}`;
@@ -924,13 +998,16 @@ export default function MarkupCanvas({
           blade_size: pileConfig.bladeSize,
           length: pileConfig.length,
           extension: pileConfig.extension,
-          position_x: pointer.x,
-          position_y: pointer.y,
+          position_x: position_x, // Store in base scale pixels for DB compatibility
+          position_y: position_y,
           is_custom: false,
           radius: 15,
           number: pileConfig.nextPileNumber,
           created_at: new Date().toISOString(),
           color: pileColor, // Use the determined color
+          // Store normalized coords in meta for future use
+          xNorm: normalizedCoords.xNorm,
+          yNorm: normalizedCoords.yNorm,
         };
         
         // Optimistic update - add pile immediately to UI
@@ -1030,7 +1107,27 @@ export default function MarkupCanvas({
         const width = Math.abs(pointer.x - footingStart.x);
         const height = Math.abs(pointer.y - footingStart.y);
         
-        if (width > 10 && height > 10) {
+        if (width > 10 && height > 10 && currentPageTransform) {
+          // Convert screen coordinates to normalized PDF coordinates
+          const startNorm = screenToAnnotation(
+            footingStart.x,
+            footingStart.y,
+            currentPageTransform
+          );
+          const endNorm = screenToAnnotation(
+            pointer.x,
+            pointer.y,
+            currentPageTransform
+          );
+          
+          // Calculate normalized dimensions
+          const widthNorm = Math.abs(endNorm.xNorm - startNorm.xNorm);
+          const heightNorm = Math.abs(endNorm.yNorm - startNorm.yNorm);
+          
+          // Use top-left corner as anchor
+          const xNorm = Math.min(startNorm.xNorm, endNorm.xNorm);
+          const yNorm = Math.min(startNorm.yNorm, endNorm.yNorm);
+          
           // Get hex color for footing type (store as hex, not rgba)
           const footingColor = footingColors[footingConfig.footingType] || "#64748b";
           // Convert hex to rgba with opacity
@@ -1041,9 +1138,16 @@ export default function MarkupCanvas({
             return `rgba(${r}, ${g}, ${b}, ${alpha})`;
           };
           
+          // Calculate pixel coordinates for backward compatibility (at base scale)
+          const baseScale = 3;
+          const startX = xNorm * (currentPageTransform.pdfPageWidth / baseScale);
+          const startY = yNorm * (currentPageTransform.pdfPageHeight / baseScale);
+          const endX = (xNorm + widthNorm) * (currentPageTransform.pdfPageWidth / baseScale);
+          const endY = (yNorm + heightNorm) * (currentPageTransform.pdfPageHeight / baseScale);
+          
           const coordinates = [
-            { x: footingStart.x, y: footingStart.y },
-            { x: pointer.x, y: pointer.y },
+            { x: startX, y: startY },
+            { x: endX, y: endY },
           ];
 
           const newFooting = {
@@ -1052,6 +1156,11 @@ export default function MarkupCanvas({
             shape: "rectangle",
             coordinates: coordinates,
             color: hexToRgba(footingColor, footingConfig.opacity),
+            // Store normalized coords in meta for future use
+            xNorm,
+            yNorm,
+            widthNorm,
+            heightNorm,
           };
 
           try {
@@ -1134,6 +1243,33 @@ export default function MarkupCanvas({
       const radius = (pile.radius || 15) * pileConfig.scale;
       const strokeWidth = 2 * pileConfig.scale;
       
+      // Convert normalized coordinates to screen coordinates for rendering
+      let screenX = pile.position_x;
+      let screenY = pile.position_y;
+      
+      // If normalized coords exist, use them; otherwise convert from pixel coords
+      if (currentPageTransform && ((pile as any).xNorm !== undefined || (pile as any).yNorm !== undefined)) {
+        const xNorm = (pile as any).xNorm ?? pile.position_x / currentPageTransform.pdfPageWidth;
+        const yNorm = (pile as any).yNorm ?? pile.position_y / currentPageTransform.pdfPageHeight;
+        const screenCoords = annotationToScreen(
+          { xNorm, yNorm },
+          currentPageTransform
+        );
+        screenX = screenCoords.screenX;
+        screenY = screenCoords.screenY;
+      } else if (currentPageTransform) {
+        // Convert legacy pixel coords to normalized, then to screen
+        const baseScale = 3;
+        const xNorm = pile.position_x / (currentPageTransform.pdfPageWidth / baseScale);
+        const yNorm = pile.position_y / (currentPageTransform.pdfPageHeight / baseScale);
+        const screenCoords = annotationToScreen(
+          { xNorm, yNorm },
+          currentPageTransform
+        );
+        screenX = screenCoords.screenX;
+        screenY = screenCoords.screenY;
+      }
+      
       const circle = new Circle({
         left: 0,
         top: 0,
@@ -1161,8 +1297,8 @@ export default function MarkupCanvas({
 
       // Group circle and text together
       const group = new Group([circle, text], {
-        left: pile.position_x,
-        top: pile.position_y,
+        left: screenX,
+        top: screenY,
         originX: 'center',
         originY: 'center',
       });
@@ -1178,15 +1314,33 @@ export default function MarkupCanvas({
       // Handle pile movement - update local state immediately, then save to DB
       let isUpdating = false;
       group.on('modified', async () => {
-        if (isUpdating) return;
+        if (isUpdating || !currentPageTransform) return;
         isUpdating = true;
         
         const pos = group.getCenterPoint();
         
+        // Convert screen coordinates to normalized PDF coordinates
+        const normalizedCoords = screenToAnnotation(
+          pos.x,
+          pos.y,
+          currentPageTransform
+        );
+        
+        // Calculate pixel position for backward compatibility (at base scale)
+        const baseScale = 3;
+        const position_x = normalizedCoords.xNorm * (currentPageTransform.pdfPageWidth / baseScale);
+        const position_y = normalizedCoords.yNorm * (currentPageTransform.pdfPageHeight / baseScale);
+        
         // Update local state IMMEDIATELY using ref to get latest piles
         const updatedPiles = pilesRef.current.map(p => {
           if (p.id === pile.id) {
-            return { ...p, position_x: pos.x, position_y: pos.y };
+            return { 
+              ...p, 
+              position_x, 
+              position_y,
+              xNorm: normalizedCoords.xNorm,
+              yNorm: normalizedCoords.yNorm,
+            };
           }
           return p;
         });
@@ -1197,8 +1351,8 @@ export default function MarkupCanvas({
           await supabase
             .from("piles")
             .update({ 
-              position_x: pos.x, 
-              position_y: pos.y 
+              position_x, 
+              position_y 
             })
             .eq("id", pile.id);
         } catch (error) {
@@ -1240,11 +1394,39 @@ export default function MarkupCanvas({
       const coords = footing.coordinates;
       if (footing.shape === "rectangle" && coords.length === 2) {
         const footingColor = footingColors[footing.footing_type] || "#64748b";
+        
+        // Convert normalized coordinates to screen coordinates for rendering
+        let left: number, top: number, width: number, height: number;
+        
+        if (currentPageTransform && ((footing as any).xNorm !== undefined)) {
+          // Use normalized coordinates if available
+          const footingAny = footing as any;
+          const screenCoords = annotationToScreen(
+            {
+              xNorm: footingAny.xNorm,
+              yNorm: footingAny.yNorm,
+              widthNorm: footingAny.widthNorm,
+              heightNorm: footingAny.heightNorm,
+            },
+            currentPageTransform
+          );
+          left = screenCoords.screenX;
+          top = screenCoords.screenY;
+          width = screenCoords.screenWidth || Math.abs(coords[1].x - coords[0].x);
+          height = screenCoords.screenHeight || Math.abs(coords[1].y - coords[0].y);
+        } else {
+          // Fallback to legacy pixel coordinates
+          left = Math.min(coords[0].x, coords[1].x);
+          top = Math.min(coords[0].y, coords[1].y);
+          width = Math.abs(coords[1].x - coords[0].x);
+          height = Math.abs(coords[1].y - coords[0].y);
+        }
+        
         const rect = new Rect({
-          left: Math.min(coords[0].x, coords[1].x),
-          top: Math.min(coords[0].y, coords[1].y),
-          width: Math.abs(coords[1].x - coords[0].x),
-          height: Math.abs(coords[1].y - coords[0].y),
+          left,
+          top,
+          width,
+          height,
           fill: hexToRgba(footingColor, footingConfig.opacity),
           stroke: footingColor,
           strokeWidth: 2,

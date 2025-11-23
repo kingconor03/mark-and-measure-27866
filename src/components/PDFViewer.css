@@ -1,0 +1,37 @@
+/* PDF Viewer Styles - Native Document Viewer Appearance */
+
+/* The main viewport with its own scrollbars and background */
+.pdf-viewer-viewport {
+  position: relative;
+  width: 100%;
+  height: 90vh; /* Adjust as needed */
+  background-color: #525659; /* A standard dark gray viewer background */
+  overflow: auto; /* This enables native-feeling scrolling */
+  display: flex;
+  justify-content: center; /* Center the document horizontally */
+}
+
+/* A container to provide padding around the stack of pages */
+.pdf-viewer-container {
+  padding: 24px 0;
+  min-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* A wrapper for each page to give it a "paper" feel */
+.pdf-page-wrapper {
+  margin-bottom: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  background: white;
+  position: relative;
+}
+
+/* Ensure pages don't get too wide on large screens */
+.pdf-page-wrapper canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+

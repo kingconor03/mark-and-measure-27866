@@ -166,3 +166,4 @@ await exportAnnotationsToPDF({
 5. Consider adding rotation support if needed
 6. Add support for other annotation types (text, highlights, etc.)
 
+

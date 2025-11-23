@@ -1,0 +1,70 @@
+Integrate the new viewport-based PDF viewer system into the markup editor (MarkupCanvas.tsx). Replace the Fabric.js canvas rendering with the viewport system while preserving all editing functionality.
+
+CURRENT STATE:
+- MarkupCanvas uses Fabric.js canvas with PDF rendered as images
+- Has pile/footing creation, editing, selection, movement
+- Already uses normalized coordinates (0..1 range)
+
+NEW SYSTEM TO INTEGRATE:
+- Viewport-based PDF viewer (like PDFViewer.tsx)
+- PDFAnnotationPage component for rendering pages
+- Viewport coordinate utilities (src/utils/coordinateUtils.ts)
+- Gray background with document-like appearance
+
+WHAT TO DO:
+
+1. REPLACE CANVAS WITH VIEWPORT:
+   - Remove Fabric.js canvas initialization
+   - Add viewport structure: <div className="pdf-viewer-viewport"> with PDFAnnotationPage components
+   - Import PDFAnnotationPage and PDFViewer.css
+
+2. PRESERVE ALL EDITING FUNCTIONALITY:
+   - Pile tool: Click to create piles (convert click to normalized coords)
+   - Footing tool: Drag to create rectangles
+   - Select tool: Click to select, drag to move annotations
+   - Delete, context menu, bulk editing must still work
+
+3. CONVERT ANNOTATIONS:
+   - Convert existing piles/footings arrays to Annotation[] format
+   - Use existing annotation conversion utilities (annotationStore.ts)
+   - Render annotations as overlays in PDFAnnotationPage via renderAnnotation prop
+
+4. HANDLE COORDINATES:
+   - Use screenToNorm() from coordinateUtils.ts for click positions
+   - Account for viewport scroll position
+   - Account for zoom level
+   - Store in normalized coordinates (already implemented)
+
+5. MAINTAIN EXISTING FEATURES:
+   - FloatingProjectSummary
+   - PropertiesPanel
+   - Toolbar and tool selection
+   - Zoom controls (pass zoom scale to PDFAnnotationPage)
+   - Pan via viewport scrolling
+   - History/undo system
+   - Export functionality
+
+KEY FILES:
+- src/components/MarkupCanvas.tsx (main refactor)
+- src/components/PDFAnnotationPage.tsx (may need editing enhancements)
+- src/utils/coordinateUtils.ts (viewport coordinates)
+- src/lib/annotations.ts (annotation types)
+- src/lib/annotationStore.ts (data conversion)
+
+IMPLEMENTATION STEPS:
+
+1. Replace Fabric.js canvas with viewport structure
+2. Load PDF pages as pdf.js page objects (not FabricImage)
+3. Create renderAnnotation function for piles/footings
+4. Convert piles/footings to Annotation[] format
+5. Update click handlers to use viewport coordinate system
+6. Handle tool-specific behaviors (pile click, footing drag, etc.)
+7. Preserve selection, movement, and deletion functionality
+
+IMPORTANT:
+- Don't break existing functionality
+- Use normalized coordinates (already in place)
+- All tools must continue working
+- Test thoroughly after changes
+
+Please integrate the viewport system into MarkupCanvas and ensure all editing features (piles, footings, tools) work correctly with the new system.

@@ -1,6 +1,42 @@
 /**
- * New PDF export system that draws annotations onto the original PDF.
- * Uses normalized coordinates to position annotations accurately.
+ * PDF EXPORT SYSTEM - Draws annotations onto original PDF
+ * 
+ * This module exports annotations directly onto the original PDF document
+ * using pdf-lib, preserving the PDF as the single source of truth.
+ * 
+ * KEY FEATURES:
+ * 
+ * 1. PRESERVES ORIGINAL PDF:
+ *    - Loads original PDF and draws annotations as overlays
+ *    - Does not convert PDF to images or screenshots
+ *    - Maintains PDF quality and metadata
+ * 
+ * 2. NORMALIZED COORDINATES:
+ *    - All annotations use normalized coordinates (0..1 range)
+ *    - Converts to PDF page dimensions during export
+ *    - Ensures accurate positioning regardless of original rendering scale
+ * 
+ * 3. SUPPORTS:
+ *    - Single page export (pageIndex specified)
+ *    - All pages export (pageIndex undefined)
+ *    - Summary box overlay (optional)
+ *    - Pile markers with numbers and colors
+ *    - Footing rectangles with opacity
+ * 
+ * 4. EXPORT OPTIONS:
+ *    - pdfUrl: URL to original PDF (must be accessible)
+ *    - annotations: Array of annotations in normalized coordinates
+ *    - pageIndex: Optional, exports specific page (0-based)
+ *    - summaryImage: Optional, summary box image data URL
+ *    - summaryPosition: Optional, summary box position and size
+ * 
+ * COORDINATE CONVERSION:
+ * - Normalized coords (0..1) are multiplied by PDF page dimensions
+ * - PDF coordinates are bottom-up (Y=0 at bottom), so Y is flipped
+ * - Text positioning calculated for proper centering
+ * 
+ * NOTE: This replaces the old screenshot-based export system that used
+ * html2canvas and Fabric.js canvas rendering.
  */
 
 import { PDFDocument, rgb, PDFPage } from "pdf-lib";
@@ -16,6 +52,10 @@ export interface ExportAnnotationsOptions {
   projectName: string;
   /** Page index to export (0-based), or undefined to export all pages */
   pageIndex?: number;
+  /** Summary box image data URL (optional) */
+  summaryImage?: string;
+  /** Summary box position and size on the page (optional) */
+  summaryPosition?: { x: number; y: number; width: number; height: number };
 }
 
 /**
@@ -56,13 +96,19 @@ function drawPileMarker(
     borderWidth: 2,
   });
 
-  // Draw pile number if available
+  // Draw pile number if available - properly centered
   const number = annotation.meta?.number;
   if (number !== undefined) {
-    page.drawText(number.toString(), {
-      x: centerX - 3, // Rough centering (font size dependent)
-      y: centerY - 3,
-      size: 12,
+    const text = number.toString();
+    const fontSize = 12;
+    // Calculate text width for proper centering (approximate: ~0.6 * fontSize per character)
+    const textWidth = text.length * fontSize * 0.6;
+    const textHeight = fontSize * 0.8; // Approximate text height
+    
+    page.drawText(text, {
+      x: centerX - textWidth / 2,
+      y: centerY - textHeight / 2,
+      size: fontSize,
       color: rgb(1, 1, 1), // White text
     });
   }
@@ -155,6 +201,32 @@ export async function exportAnnotationsToPDF(
           // Add other annotation types as needed
         }
       }
+      
+      // Draw summary box if provided and this is the first page being exported
+      if (options.summaryImage && options.summaryPosition && i === 0) {
+        try {
+          const summaryBytes = await fetch(options.summaryImage).then((res) => res.arrayBuffer());
+          const summaryImg = await pdfDoc.embedPng(summaryBytes);
+          
+          // Calculate position - summaryPosition is relative to canvas, need to convert to PDF coordinates
+          // Assuming summaryPosition is in pixels relative to the page at a certain scale
+          // We'll position it at a fixed location (e.g., bottom right)
+          const summaryWidth = Math.min(options.summaryPosition.width, pageWidth * 0.4); // Max 40% of page width
+          const summaryHeight = (summaryWidth / options.summaryPosition.width) * options.summaryPosition.height;
+          const summaryX = pageWidth - summaryWidth - 20; // 20pt margin from right
+          const summaryY = 20; // 20pt margin from bottom
+          
+          page.drawImage(summaryImg, {
+            x: summaryX,
+            y: summaryY,
+            width: summaryWidth,
+            height: summaryHeight,
+          });
+        } catch (error) {
+          console.error("Error embedding summary image:", error);
+          // Continue without summary if it fails
+        }
+      }
     }
 
     // Save and download
@@ -166,7 +238,7 @@ export async function exportAnnotationsToPDF(
 
     const pageSuffix = options.pageIndex !== undefined
       ? `_Page${options.pageIndex + 1}`
-      : "";
+      : "_all_pages";
     link.download = `${options.projectName}${pageSuffix}_annotated.pdf`;
     link.click();
 
@@ -195,4 +267,5 @@ export async function getPdfPageDimensions(
     height: viewport.height,
   };
 }
+
 

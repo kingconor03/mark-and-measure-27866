@@ -1,7 +1,38 @@
 /**
- * PDFAnnotationPage - Renders a single PDF page with annotation overlays.
- * This component handles rendering the PDF page and positioning annotations
- * that are stored in normalized coordinates.
+ * PDFAnnotationPage - Renders a single PDF page with annotation overlays
+ * 
+ * This component is the core of the viewport-based PDF viewer system.
+ * It renders a PDF page as a canvas and positions annotation overlays above it.
+ * 
+ * ARCHITECTURE:
+ * 
+ * 1. PDF PAGE RENDERING:
+ *    - Uses pdf.js to render PDF page to HTML5 canvas
+ *    - Canvas size matches PDF page at current zoom level
+ *    - Renders at specified zoom scale
+ * 
+ * 2. ANNOTATION OVERLAY:
+ *    - Absolutely positioned div above the canvas
+ *    - Size matches PDF page dimensions at current zoom
+ *    - Annotations positioned using normalized coordinates
+ *    - Custom renderer function can be provided for annotation visualization
+ * 
+ * 3. PAGE GEOMETRY TRACKING:
+ *    - Tracks page's natural size (at scale 1)
+ *    - Tracks current zoom level
+ *    - Tracks page's position relative to viewport's scrolled content
+ *    - Updates on scroll/resize events
+ *    - Notifies parent via onPageGeometryUpdate callback
+ * 
+ * 4. COORDINATE SYSTEM:
+ *    - PageGeometry provides all info needed for coordinate conversion
+ *    - Annotations use normalized coordinates (0..1 range)
+ *    - Converted to screen pixels based on current zoom and page position
+ * 
+ * USAGE:
+ * - Used by both PDFViewer (read-only viewer) and MarkupCanvas (editor)
+ * - Receives pdf.js page object, zoom level, and annotations array
+ * - Handles all PDF rendering and annotation positioning logic
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -14,8 +45,9 @@ interface PDFAnnotationPageProps {
   pdfPage: any; // pdf.js page object
   zoom: number;
   annotations: Annotation[];
-  onAnnotationClick?: (annotation: Annotation) => void;
+  onAnnotationClick?: (annotation: Annotation, e?: React.MouseEvent) => void;
   renderAnnotation?: (annotation: Annotation, screenPos: { x: number; y: number }, geo: PageGeometry) => React.ReactNode;
+  onPageGeometryUpdate?: (geo: PageGeometry) => void;
 }
 
 export function PDFAnnotationPage({
@@ -25,6 +57,7 @@ export function PDFAnnotationPage({
   annotations,
   onAnnotationClick,
   renderAnnotation,
+  onPageGeometryUpdate,
 }: PDFAnnotationPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -71,14 +104,22 @@ export function PDFAnnotationPage({
         if (wrapperRef.current) {
           const wrapperRect = wrapperRef.current.getBoundingClientRect();
           const viewport = pdfPage.getViewport({ scale: 1 }); // Natural size
+          const viewportElement = wrapperRef.current.closest('.pdf-viewer-viewport') as HTMLElement;
           
-          setPageGeometry({
+          const geo = {
             pageWidth: viewport.width,
             pageHeight: viewport.height,
             zoom,
-            pageOffsetX: wrapperRect.left,
-            pageOffsetY: wrapperRect.top,
-          });
+            pageOffsetX: viewportElement 
+              ? wrapperRect.left - viewportElement.getBoundingClientRect().left + viewportElement.scrollLeft
+              : wrapperRect.left,
+            pageOffsetY: viewportElement
+              ? wrapperRect.top - viewportElement.getBoundingClientRect().top + viewportElement.scrollTop
+              : wrapperRect.top,
+          };
+          
+          setPageGeometry(geo);
+          onPageGeometryUpdate?.(geo);
         }
       } catch (error) {
         console.error(`❌ Error rendering PDF page ${pageNumber}:`, error);
@@ -86,7 +127,36 @@ export function PDFAnnotationPage({
     };
 
     render();
-  }, [pdfPage, zoom, pageNumber]);
+  }, [pdfPage, zoom, pageNumber, onPageGeometryUpdate]);
+  
+  // Update geometry on zoom change without re-rendering the canvas
+  useEffect(() => {
+    if (!wrapperRef.current || !pdfPage || !pageGeometry) return;
+    
+    const updateGeometry = () => {
+      if (!wrapperRef.current) return;
+      
+      const wrapperRect = wrapperRef.current.getBoundingClientRect();
+      const viewport = pdfPage.getViewport({ scale: 1 });
+      const viewportElement = wrapperRef.current.closest('.pdf-viewer-viewport') as HTMLElement;
+      
+      if (viewportElement) {
+        const geo = {
+          pageWidth: viewport.width,
+          pageHeight: viewport.height,
+          zoom,
+          pageOffsetX: wrapperRect.left - viewportElement.getBoundingClientRect().left + viewportElement.scrollLeft,
+          pageOffsetY: wrapperRect.top - viewportElement.getBoundingClientRect().top + viewportElement.scrollTop,
+        };
+        setPageGeometry(geo);
+        onPageGeometryUpdate?.(geo);
+      }
+    };
+    
+    // Debounce geometry updates on zoom
+    const timeoutId = setTimeout(updateGeometry, 50);
+    return () => clearTimeout(timeoutId);
+  }, [zoom, pdfPage, pageGeometry, onPageGeometryUpdate]);
 
   // Update page geometry on scroll/resize
   useEffect(() => {
@@ -100,13 +170,15 @@ export function PDFAnnotationPage({
       const viewportElement = wrapperRef.current.closest('.pdf-viewer-viewport') as HTMLElement;
       
       if (viewportElement) {
-        setPageGeometry({
+        const geo = {
           pageWidth: viewport.width,
           pageHeight: viewport.height,
           zoom,
           pageOffsetX: wrapperRect.left - viewportElement.getBoundingClientRect().left + viewportElement.scrollLeft,
           pageOffsetY: wrapperRect.top - viewportElement.getBoundingClientRect().top + viewportElement.scrollTop,
-        });
+        };
+        setPageGeometry(geo);
+        onPageGeometryUpdate?.(geo);
       }
     };
 
@@ -119,7 +191,7 @@ export function PDFAnnotationPage({
       viewport?.removeEventListener('scroll', updateGeometry);
       window.removeEventListener('resize', updateGeometry);
     };
-  }, [pdfPage, zoom]);
+  }, [pdfPage, zoom, onPageGeometryUpdate]);
 
   // Filter annotations for this page
   const pageAnnotations = annotations.filter(a => a.pageIndex === pageNumber - 1); // Convert to 0-based
@@ -165,7 +237,7 @@ export function PDFAnnotationPage({
                   transform: 'translate(-50%, -50%)', // Center on the point
                   pointerEvents: 'auto',
                 }}
-                onClick={() => onAnnotationClick?.(annotation)}
+                onClick={(e) => onAnnotationClick?.(annotation, e)}
               >
                 {renderAnnotation ? (
                   renderAnnotation(annotation, { x: pixelX, y: pixelY }, pageGeometry)

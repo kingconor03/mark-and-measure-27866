@@ -126,11 +126,12 @@ export default function FloatingProjectSummary({ piles, footings, pileColors, fo
   // Update position when pinned and canvas transform changes
   useEffect(() => {
     if (isPinned && pinnedCanvasCoords) {
-      // Convert canvas coordinates to screen coordinates
+      // Convert viewport coordinates to screen coordinates
       const vt = canvasTransform.viewportTransform;
       const zoom = canvasTransform.zoom;
-      const screenX = pinnedCanvasCoords.x * zoom + vt[4];
-      const screenY = pinnedCanvasCoords.y * zoom + vt[5];
+      // vt[4] is scrollLeft, vt[5] is scrollTop in viewport transform
+      const screenX = pinnedCanvasCoords.x * zoom + (vt[4] || 0);
+      const screenY = pinnedCanvasCoords.y * zoom + (vt[5] || 0);
       setPosition({ x: screenX, y: screenY });
     }
   }, [isPinned, pinnedCanvasCoords, canvasTransform]);
@@ -344,12 +345,22 @@ export default function FloatingProjectSummary({ piles, footings, pileColors, fo
               onClick={(e) => {
                 e.stopPropagation();
                 if (!isPinned) {
-                  // Pinning: convert screen coordinates to canvas coordinates
-                  const vt = canvasTransform.viewportTransform;
-                  const zoom = canvasTransform.zoom;
-                  const canvasX = (position.x - vt[4]) / zoom;
-                  const canvasY = (position.y - vt[5]) / zoom;
-                  setPinnedCanvasCoords({ x: canvasX, y: canvasY });
+                  // Pinning: store viewport-relative coordinates
+                  // Position is already in screen coordinates, convert to viewport-relative
+                  const viewportElement = document.querySelector('.pdf-viewer-viewport') as HTMLElement;
+                  if (viewportElement) {
+                    const viewportRect = viewportElement.getBoundingClientRect();
+                    const viewportX = position.x - viewportRect.left + viewportElement.scrollLeft;
+                    const viewportY = position.y - viewportRect.top + viewportElement.scrollTop;
+                    setPinnedCanvasCoords({ x: viewportX, y: viewportY });
+                  } else {
+                    // Fallback: use current position relative to viewport transform
+                    const vt = canvasTransform.viewportTransform;
+                    const zoom = canvasTransform.zoom;
+                    const canvasX = (position.x - (vt[4] || 0)) / zoom;
+                    const canvasY = (position.y - (vt[5] || 0)) / zoom;
+                    setPinnedCanvasCoords({ x: canvasX, y: canvasY });
+                  }
                   setIsPinned(true);
                   toast("Summary box pinned to PDF - it will now move and scale with the canvas");
                 } else {

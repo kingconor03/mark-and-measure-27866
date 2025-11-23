@@ -4,6 +4,38 @@
  * with proper accounting for viewport scrolling.
  */
 
+/**
+ * COORDINATE UTILITIES - Viewport-Aware Coordinate Conversion
+ * 
+ * This module provides functions to convert between screen coordinates (pixels)
+ * and normalized PDF coordinates (0..1 range relative to page dimensions).
+ * 
+ * KEY CONCEPTS:
+ * 
+ * 1. NORMALIZED COORDINATES (xNorm, yNorm):
+ *    - Range: 0.0 to 1.0
+ *    - Relative to PDF page width/height
+ *    - Example: xNorm=0.5 means 50% across the page width
+ *    - Persists correctly across zoom/pan changes
+ * 
+ * 2. SCREEN COORDINATES:
+ *    - Pixels relative to viewport's scrolled content
+ *    - Accounts for viewport scroll position
+ *    - Accounts for current zoom level
+ * 
+ * 3. PAGE GEOMETRY:
+ *    - Tracks page's natural size, zoom, and position
+ *    - Updated when viewport scrolls or zooms
+ *    - Used for all coordinate conversions
+ * 
+ * USAGE:
+ * - screenToNorm(): Convert mouse click to normalized coords (for creating annotations)
+ * - normToScreen(): Convert normalized coords to screen pixels (for rendering annotations)
+ * 
+ * These functions ensure annotations stay aligned with the PDF page regardless of
+ * zoom level or scroll position.
+ */
+
 export interface PageGeometry {
   pageWidth: number; // Page's natural width (at 100% zoom, in PDF units)
   pageHeight: number; // Page's natural height (at 100% zoom, in PDF units)
@@ -77,4 +109,5 @@ export function normToScreen(
 
   return { x, y };
 }
+
 

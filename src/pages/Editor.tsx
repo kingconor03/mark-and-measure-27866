@@ -203,13 +203,14 @@ export default function Editor() {
     }
   };
 
-  const handleExport = async () => {
+  const handleExport = async (exportAllPages: boolean = false) => {
     // Dispatch export event with current page details
-    const exportEvent = new CustomEvent("export-pdf", {
+    const exportEvent = new CustomEvent(exportAllPages ? "export-pdf-all" : "export-pdf", {
       detail: {
         projectName: project.name,
         pageNumber: currentPage,
         pageId: pages[currentPage].id,
+        exportAllPages,
       }
     });
     window.dispatchEvent(exportEvent);
@@ -629,10 +630,16 @@ export default function Editor() {
               </Button>
             </div>
           )}
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" />
-            Download PDF
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => handleExport(false)}>
+              <Download className="h-4 w-4 mr-2" />
+              Download Marked Up PDF
+            </Button>
+            <Button variant="outline" onClick={() => handleExport(true)}>
+              <Download className="h-4 w-4 mr-2" />
+              Download Full PDF
+            </Button>
+          </div>
           <Button onClick={handleSave}>Save</Button>
         </div>
       </header>

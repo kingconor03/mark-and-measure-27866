@@ -45,18 +45,53 @@ export function PDFViewer({ fileUrl, fileName, onClose, isImage = false }: PDFVi
         
         console.log("🔍 Resolving file URL:", fileUrl);
         
-        // Check if fileUrl is already a full URL
+        // Check if fileUrl is a Supabase storage URL (public or authenticated)
+        const supabaseStorageMatch = fileUrl.match(/\/storage\/v1\/object\/(public|authenticated)\/([^/]+)\/(.+)$/);
+        
+        if (supabaseStorageMatch) {
+          const [, accessType, bucket, path] = supabaseStorageMatch;
+          console.log(`📦 Detected ${accessType} bucket: ${bucket}, path: ${path}`);
+          
+          // Private buckets (blueprints, org-assets, etc.) need signed URLs
+          const privateBuckets = ['blueprints', 'org-assets', 'quote-files', 'cert-files'];
+          
+          if (privateBuckets.includes(bucket) && session) {
+            console.log("🔐 Creating signed URL for private bucket:", bucket);
+            
+            const { data, error } = await supabase.storage
+              .from(bucket)
+              .createSignedUrl(path, 3600); // 1 hour expiry
+            
+            if (error) {
+              console.error("❌ Error creating signed URL:", error);
+              alert(`Cannot access file in private bucket "${bucket}". Please check your permissions.`);
+              setLoading(false);
+              return;
+            }
+            
+            if (data?.signedUrl) {
+              console.log("✅ Got signed URL successfully");
+              setResolvedUrl(data.signedUrl);
+              return;
+            }
+          } else if (accessType === 'public') {
+            // Already a public URL, use as-is
+            console.log("✅ Using public URL as-is");
+            setResolvedUrl(fileUrl);
+            return;
+          }
+        }
+        
+        // Check if it's already a full URL (non-Supabase)
         if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-          // Already a full URL - try it first
           console.log("✅ Using provided URL as-is:", fileUrl);
           setResolvedUrl(fileUrl);
           return;
         }
         
-        // Check if it's a storage path format like "org-assets/path/to/file.pdf" or "blueprints/path/to/file.pdf"
-        const storagePathMatch = fileUrl.match(/^(org-assets|blueprints)\/(.+)$/);
+        // Check if it's a storage path format like "blueprints/path/to/file.pdf"
+        const storagePathMatch = fileUrl.match(/^(org-assets|blueprints|quote-files|cert-files)\/(.+)$/);
         if (storagePathMatch && session) {
-          // Need to get signed URL
           const bucket = storagePathMatch[1];
           const path = storagePathMatch[2];
           
@@ -64,38 +99,28 @@ export function PDFViewer({ fileUrl, fileName, onClose, isImage = false }: PDFVi
           
           const { data, error } = await supabase.storage
             .from(bucket)
-            .createSignedUrl(path, 3600); // 1 hour expiry
+            .createSignedUrl(path, 3600);
           
           if (error) {
             console.error("❌ Error creating signed URL:", error);
-            // Fallback: try public URL format
-            const publicUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
-            console.log("⚠️ Falling back to public URL:", publicUrl);
-            setResolvedUrl(publicUrl);
-          } else if (data?.signedUrl) {
+            alert(`Cannot access file: ${error.message}`);
+            setLoading(false);
+            return;
+          }
+          
+          if (data?.signedUrl) {
             console.log("✅ Got signed URL successfully");
             setResolvedUrl(data.signedUrl);
-          } else {
-            // Fallback
-            const publicUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
-            console.log("⚠️ Using public URL fallback:", publicUrl);
-            setResolvedUrl(publicUrl);
-          }
-        } else {
-          // Not a recognizable format, try constructing public URL if it looks like a path
-          if (fileUrl.includes('/')) {
-            // Might be a path, try public URL format
-            const publicUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${fileUrl}`;
-            console.log("🔗 Trying constructed public URL:", publicUrl);
-            setResolvedUrl(publicUrl);
-          } else {
-            console.log("✅ Using fileUrl as-is:", fileUrl);
-            setResolvedUrl(fileUrl);
+            return;
           }
         }
+        
+        // Fallback: use fileUrl as-is
+        console.log("⚠️ Using fileUrl as fallback:", fileUrl);
+        setResolvedUrl(fileUrl);
+        
       } catch (error) {
         console.error("❌ Error resolving file URL:", error);
-        // Fallback to original URL
         setResolvedUrl(fileUrl);
       }
     };

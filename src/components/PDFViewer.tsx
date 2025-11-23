@@ -43,12 +43,12 @@ export function PDFViewer({ fileUrl, fileName, onClose, isImage = false }: PDFVi
         setLoading(true);
         setResolvedUrl(null);
         
-        console.log("Resolving file URL:", fileUrl);
+        console.log("🔍 Resolving file URL:", fileUrl);
         
         // Check if fileUrl is already a full URL
         if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
           // Already a full URL - try it first
-          console.log("Using provided URL as-is:", fileUrl);
+          console.log("✅ Using provided URL as-is:", fileUrl);
           setResolvedUrl(fileUrl);
           return;
         }
@@ -60,24 +60,25 @@ export function PDFViewer({ fileUrl, fileName, onClose, isImage = false }: PDFVi
           const bucket = storagePathMatch[1];
           const path = storagePathMatch[2];
           
-          console.log("Fetching signed URL for bucket:", bucket, "path:", path);
+          console.log("🔐 Fetching signed URL for bucket:", bucket, "path:", path);
           
           const { data, error } = await supabase.storage
             .from(bucket)
             .createSignedUrl(path, 3600); // 1 hour expiry
           
           if (error) {
-            console.error("Error creating signed URL:", error);
+            console.error("❌ Error creating signed URL:", error);
             // Fallback: try public URL format
             const publicUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
-            console.log("Falling back to public URL:", publicUrl);
+            console.log("⚠️ Falling back to public URL:", publicUrl);
             setResolvedUrl(publicUrl);
           } else if (data?.signedUrl) {
-            console.log("Got signed URL successfully");
+            console.log("✅ Got signed URL successfully");
             setResolvedUrl(data.signedUrl);
           } else {
             // Fallback
             const publicUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+            console.log("⚠️ Using public URL fallback:", publicUrl);
             setResolvedUrl(publicUrl);
           }
         } else {
@@ -85,15 +86,15 @@ export function PDFViewer({ fileUrl, fileName, onClose, isImage = false }: PDFVi
           if (fileUrl.includes('/')) {
             // Might be a path, try public URL format
             const publicUrl = `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${fileUrl}`;
-            console.log("Trying constructed public URL:", publicUrl);
+            console.log("🔗 Trying constructed public URL:", publicUrl);
             setResolvedUrl(publicUrl);
           } else {
-            console.log("Using fileUrl as-is:", fileUrl);
+            console.log("✅ Using fileUrl as-is:", fileUrl);
             setResolvedUrl(fileUrl);
           }
         }
       } catch (error) {
-        console.error("Error resolving file URL:", error);
+        console.error("❌ Error resolving file URL:", error);
         // Fallback to original URL
         setResolvedUrl(fileUrl);
       }
@@ -129,14 +130,14 @@ export function PDFViewer({ fileUrl, fileName, onClose, isImage = false }: PDFVi
 
   const loadPDF = async () => {
     if (!resolvedUrl) {
-      console.error("No resolved URL available");
+      console.error("❌ No resolved URL available");
       setLoading(false);
       return;
     }
     
     try {
       setLoading(true);
-      console.log("Loading PDF from URL:", resolvedUrl);
+      console.log("📄 Loading PDF from URL:", resolvedUrl);
       
       // Configure PDF.js to handle CORS if needed
       const loadingTask = pdfjsLib.getDocument({
@@ -146,7 +147,7 @@ export function PDFViewer({ fileUrl, fileName, onClose, isImage = false }: PDFVi
       });
       
       const pdf = await loadingTask.promise;
-      console.log("PDF loaded successfully, pages:", pdf.numPages);
+      console.log("✅ PDF loaded successfully, pages:", pdf.numPages);
       
       pdfDocRef.current = pdf;
       setNumPages(pdf.numPages);
@@ -157,22 +158,23 @@ export function PDFViewer({ fileUrl, fileName, onClose, isImage = false }: PDFVi
         try {
           const page = await pdf.getPage(i);
           pagesArray.push(page);
-          console.log(`Loaded page ${i}/${pdf.numPages}`);
+          console.log(`✅ Loaded page ${i}/${pdf.numPages}`);
         } catch (pageError) {
-          console.error(`Error loading page ${i}:`, pageError);
+          console.error(`❌ Error loading page ${i}:`, pageError);
         }
       }
       
       if (pagesArray.length > 0) {
         setPages(pagesArray);
-        console.log(`Successfully loaded ${pagesArray.length} pages`);
+        console.log(`✅ Successfully loaded ${pagesArray.length} pages, setting pages state`);
       } else {
-        console.error("No pages were loaded successfully");
+        console.error("❌ No pages were loaded successfully");
       }
     } catch (error) {
-      console.error("Error loading PDF:", error);
+      console.error("❌ Error loading PDF:", error);
       // Show error message to user
-      alert(`Failed to load PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to load PDF: ${errorMsg}\n\nThis might be a storage bucket issue. Please check that the file exists and is accessible.`);
     } finally {
       setLoading(false);
     }

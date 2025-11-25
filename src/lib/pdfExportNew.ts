@@ -86,28 +86,35 @@ function drawPileMarker(
   const color = annotation.color || "#FF6400";
   const rgbColor = hexToRgb(color);
 
+  // Draw border circle first
+  page.drawCircle({
+    x: centerX,
+    y: centerY,
+    size: radius,
+    borderColor: rgb(0, 0, 0),
+    borderWidth: 2,
+  });
+  
   // Draw filled circle
   page.drawCircle({
     x: centerX,
     y: centerY,
     size: radius,
     color: rgb(rgbColor.r, rgbColor.g, rgbColor.b),
-    borderColor: rgb(0, 0, 0),
-    borderWidth: 2,
   });
 
-  // Draw pile number if available - properly centered
+  // Draw pile number LAST to ensure it's on top
   const number = annotation.meta?.number;
   if (number !== undefined) {
     const text = number.toString();
-    const fontSize = 14; // Match viewport base font size
-    // Calculate text width for proper centering (approximate: ~0.6 * fontSize per character)
-    const textWidth = text.length * fontSize * 0.6;
-    const textHeight = fontSize * 0.8; // Approximate text height
+    const fontSize = 16; // Slightly larger for better visibility
+    // Calculate text width for proper centering (approximate: ~0.55 * fontSize per character)
+    const textWidth = text.length * fontSize * 0.55;
+    const textHeight = fontSize * 0.35; // Adjust for baseline positioning
     
     page.drawText(text, {
       x: centerX - textWidth / 2,
-      y: centerY - textHeight / 2,
+      y: centerY - textHeight,
       size: fontSize,
       color: rgb(1, 1, 1), // White text
     });

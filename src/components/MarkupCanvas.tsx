@@ -181,6 +181,26 @@ export default function MarkupCanvas({
     footingsRef.current = footings;
   }, [footings]);
   
+  // Add native wheel event listener to prevent browser zoom
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    
+    const handleNativeWheel = (e: WheelEvent) => {
+      // Prevent browser zoom when Ctrl/Cmd is held
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+    
+    // Add listener with passive: false to allow preventDefault
+    viewport.addEventListener('wheel', handleNativeWheel, { passive: false });
+    
+    return () => {
+      viewport.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, []);
+  
   // Get current page and filter markups for current page
   const currentPage = pages[currentPageIndex];
   const currentPagePiles = useMemo(() => piles.filter(p => p.page_id === currentPage?.id), [piles, currentPage?.id]);

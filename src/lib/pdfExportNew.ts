@@ -100,7 +100,7 @@ function drawPileMarker(
   const number = annotation.meta?.number;
   if (number !== undefined) {
     const text = number.toString();
-    const fontSize = 12;
+    const fontSize = 14; // Match viewport base font size
     // Calculate text width for proper centering (approximate: ~0.6 * fontSize per character)
     const textWidth = text.length * fontSize * 0.6;
     const textHeight = fontSize * 0.8; // Approximate text height
@@ -165,27 +165,40 @@ export async function exportAnnotationsToPDF(
     const pdfBytes = await fetch(options.pdfUrl).then((res) => res.arrayBuffer());
     const pdfDoc = await PDFDocument.load(pdfBytes);
 
-    // Get all pages or filter by pageIndex
-    const pages = pdfDoc.getPages();
-    const pagesToExport = options.pageIndex !== undefined
-      ? [pages[options.pageIndex]]
-      : pages;
+    // Get all pages from PDF
+    const allPages = pdfDoc.getPages();
+    
+    // Filter annotations by page if exporting single page
+    const filteredAnnotations = options.pageIndex !== undefined
+      ? options.annotations.filter(ann => ann.pageIndex === options.pageIndex)
+      : options.annotations;
 
     // Group annotations by page index
     const annotationsByPage = new Map<number, Annotation[]>();
-    for (const annotation of options.annotations) {
+    for (const annotation of filteredAnnotations) {
       const pageAnns = annotationsByPage.get(annotation.pageIndex) || [];
       pageAnns.push(annotation);
       annotationsByPage.set(annotation.pageIndex, pageAnns);
     }
 
-    // Draw annotations on each page
-    for (let i = 0; i < pagesToExport.length; i++) {
-      const page = pagesToExport[i];
-      const pageIndex = options.pageIndex !== undefined ? options.pageIndex : i;
-      const pageAnnotations = annotationsByPage.get(pageIndex) || [];
+    // Determine which pages to include in output
+    // For single page export: only that page
+    // For full PDF export: all pages, with annotations overlaid where present
+    const pagesToInclude = options.pageIndex !== undefined
+      ? [options.pageIndex]
+      : Array.from({ length: allPages.length }, (_, i) => i);
+    
+    // Create new PDF document
+    const outputPdf = await PDFDocument.create();
+    
+    // Copy pages and draw annotations
+    for (const pageIdx of pagesToInclude) {
+      const [copiedPage] = await outputPdf.copyPages(pdfDoc, [pageIdx]);
+      outputPdf.addPage(copiedPage);
+      
+      const pageAnnotations = annotationsByPage.get(pageIdx) || [];
 
-      const pageSize = page.getSize();
+      const pageSize = copiedPage.getSize();
       const pageWidth = pageSize.width;
       const pageHeight = pageSize.height;
 
@@ -193,20 +206,20 @@ export async function exportAnnotationsToPDF(
       for (const annotation of pageAnnotations) {
         switch (annotation.type) {
           case "pile_marker":
-            drawPileMarker(page, annotation, pageWidth, pageHeight);
+            drawPileMarker(copiedPage, annotation, pageWidth, pageHeight);
             break;
           case "footing":
-            drawFooting(page, annotation, pageWidth, pageHeight);
+            drawFooting(copiedPage, annotation, pageWidth, pageHeight);
             break;
           // Add other annotation types as needed
         }
       }
       
       // Draw summary box if provided and this is the first page being exported
-      if (options.summaryImage && options.summaryPosition && i === 0) {
+      if (options.summaryImage && options.summaryPosition && pageIdx === pagesToInclude[0]) {
         try {
           const summaryBytes = await fetch(options.summaryImage).then((res) => res.arrayBuffer());
-          const summaryImg = await pdfDoc.embedPng(summaryBytes);
+          const summaryImg = await outputPdf.embedPng(summaryBytes);
           
           // Calculate position - summaryPosition is relative to canvas, need to convert to PDF coordinates
           // Assuming summaryPosition is in pixels relative to the page at a certain scale
@@ -216,7 +229,7 @@ export async function exportAnnotationsToPDF(
           const summaryX = pageWidth - summaryWidth - 20; // 20pt margin from right
           const summaryY = 20; // 20pt margin from bottom
           
-          page.drawImage(summaryImg, {
+          copiedPage.drawImage(summaryImg, {
             x: summaryX,
             y: summaryY,
             width: summaryWidth,
@@ -230,7 +243,7 @@ export async function exportAnnotationsToPDF(
     }
 
     // Save and download
-    const modifiedPdfBytes = await pdfDoc.save();
+    const modifiedPdfBytes = await outputPdf.save();
     const blob = new Blob([modifiedPdfBytes as BlobPart], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");

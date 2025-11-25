@@ -181,26 +181,6 @@ export default function MarkupCanvas({
     footingsRef.current = footings;
   }, [footings]);
   
-  // Add native wheel event listener to prevent browser zoom
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (!viewport) return;
-    
-    const handleNativeWheel = (e: WheelEvent) => {
-      // Prevent browser zoom when Ctrl/Cmd is held
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-      }
-    };
-    
-    // Add listener with passive: false to allow preventDefault
-    viewport.addEventListener('wheel', handleNativeWheel, { passive: false });
-    
-    return () => {
-      viewport.removeEventListener('wheel', handleNativeWheel);
-    };
-  }, []);
-  
   // Get current page and filter markups for current page
   const currentPage = pages[currentPageIndex];
   const currentPagePiles = useMemo(() => piles.filter(p => p.page_id === currentPage?.id), [piles, currentPage?.id]);
@@ -884,8 +864,8 @@ export default function MarkupCanvas({
   const pendingZoomRef = useRef<number | null>(null);
   
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    // Only handle zoom when Ctrl/Cmd is held, otherwise allow normal scrolling
-    if (!viewportRef.current || !currentPdfPage || !(e.ctrlKey || e.metaKey)) return;
+    // Handle zoom on all wheel events
+    if (!viewportRef.current || !currentPdfPage) return;
     
     e.preventDefault();
     e.stopPropagation();
@@ -943,17 +923,15 @@ export default function MarkupCanvas({
     }, 16); // Reduced delay for more responsive zoom
   }, [zoom, currentPdfPage]);
   
-  // Add native wheel event listener to prevent browser zoom
+  // Add native wheel event listener to prevent browser zoom and default scroll
   // This must be a native listener with passive: false to preventDefault synchronously
   useEffect(() => {
     const viewportElement = viewportRef.current;
     if (!viewportElement) return;
     
     const handleNativeWheel = (e: WheelEvent) => {
-      // Prevent browser zoom when Ctrl/Cmd is held
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-      }
+      // Prevent default scroll - we handle zoom ourselves
+      e.preventDefault();
     };
     
     // Add listener with passive: false to allow preventDefault

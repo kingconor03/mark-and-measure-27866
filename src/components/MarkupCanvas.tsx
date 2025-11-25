@@ -200,11 +200,12 @@ export default function MarkupCanvas({
   // - This ensures annotations stay aligned during zoom/pan
   //
   const annotations = useMemo(() => {
-    if (!currentPdfPage) return [];
+    if (!currentPdfPage || !currentPage) return [];
     
     // Get PDF page viewport at scale 1 (natural size) for coordinate conversion
     const viewport = currentPdfPage.getViewport({ scale: 1 });
-    const pageIndex = currentPageIndex;
+    // Use actual page number for correct annotation filtering
+    const pageIndex = currentPage.page_number - 1;
     const result: Annotation[] = [];
     
     // Convert piles to annotations
@@ -295,7 +296,7 @@ export default function MarkupCanvas({
     });
     
     return result;
-  }, [currentPagePiles, currentPageFootings, currentPageIndex, currentPdfPage]);
+  }, [currentPagePiles, currentPageFootings, currentPage, currentPdfPage]);
   
   // Function to renumber piles
   const renumberPiles = async (currentPiles: any[]) => {

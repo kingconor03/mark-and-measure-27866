@@ -35,7 +35,7 @@
  * - Handles all PDF rendering and annotation positioning logic
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, memo } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import { Annotation } from "@/lib/annotations";
 import { PageGeometry } from "@/utils/coordinateUtils";
@@ -50,7 +50,7 @@ interface PDFAnnotationPageProps {
   onPageGeometryUpdate?: (geo: PageGeometry) => void;
 }
 
-export function PDFAnnotationPage({
+export const PDFAnnotationPage = memo(function PDFAnnotationPage({
   pageNumber,
   pdfPage,
   zoom,
@@ -205,7 +205,7 @@ export function PDFAnnotationPage({
       )}
     </div>
   );
-}
+});
 
 /**
  * Default annotation renderer - renders a simple marker
@@ -260,4 +260,3 @@ function DefaultAnnotationRenderer({ annotation, pageGeometry }: { annotation: A
   
   return null;
 }
-

@@ -65,40 +65,24 @@ export function PDFAnnotationPage({
 
   // Render the PDF page
   useEffect(() => {
-    if (!canvasRef.current || !pdfPage) {
-      console.log(`⚠️ Page ${pageNumber}: Missing canvas or pdfPage`, { 
-        hasCanvas: !!canvasRef.current, 
-        hasPdfPage: !!pdfPage 
-      });
-      return;
-    }
+    if (!canvasRef.current || !pdfPage) return;
 
     const render = async () => {
       try {
-        console.log(`🎨 Rendering page ${pageNumber}...`);
         const viewport = pdfPage.getViewport({ scale: zoom });
         const canvas = canvasRef.current;
-        if (!canvas) {
-          console.error(`❌ Page ${pageNumber}: Canvas ref lost during render`);
-          return;
-        }
+        if (!canvas) return;
 
         const context = canvas.getContext("2d");
-        if (!context) {
-          console.error(`❌ Page ${pageNumber}: Failed to get 2D context`);
-          return;
-        }
+        if (!context) return;
 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
-        console.log(`📐 Page ${pageNumber} canvas dimensions: ${canvas.width}x${canvas.height}`);
 
         await pdfPage.render({
           canvasContext: context,
           viewport: viewport,
         }).promise;
-
-        console.log(`✅ Page ${pageNumber} rendered successfully`);
 
         // Update page geometry after rendering
         if (wrapperRef.current) {
@@ -122,48 +106,19 @@ export function PDFAnnotationPage({
           onPageGeometryUpdate?.(geo);
         }
       } catch (error) {
-        console.error(`❌ Error rendering PDF page ${pageNumber}:`, error);
+        console.error(`Error rendering PDF page ${pageNumber}:`, error);
       }
     };
 
     render();
   }, [pdfPage, zoom, pageNumber, onPageGeometryUpdate]);
   
-  // Update geometry on zoom change without re-rendering the canvas
-  useEffect(() => {
-    if (!wrapperRef.current || !pdfPage || !pageGeometry) return;
-    
-    const updateGeometry = () => {
-      if (!wrapperRef.current) return;
-      
-      const wrapperRect = wrapperRef.current.getBoundingClientRect();
-      const viewport = pdfPage.getViewport({ scale: 1 });
-      const viewportElement = wrapperRef.current.closest('.pdf-viewer-viewport') as HTMLElement;
-      
-      if (viewportElement) {
-        const geo = {
-          pageWidth: viewport.width,
-          pageHeight: viewport.height,
-          zoom,
-          pageOffsetX: wrapperRect.left - viewportElement.getBoundingClientRect().left + viewportElement.scrollLeft,
-          pageOffsetY: wrapperRect.top - viewportElement.getBoundingClientRect().top + viewportElement.scrollTop,
-        };
-        setPageGeometry(geo);
-        onPageGeometryUpdate?.(geo);
-      }
-    };
-    
-    // Debounce geometry updates on zoom
-    const timeoutId = setTimeout(updateGeometry, 50);
-    return () => clearTimeout(timeoutId);
-  }, [zoom, pdfPage, pageGeometry, onPageGeometryUpdate]);
-
-  // Update page geometry on scroll/resize
+  // Update page geometry on scroll/resize only (zoom updates are handled in the render effect above)
   useEffect(() => {
     if (!wrapperRef.current || !pdfPage) return;
 
     const updateGeometry = () => {
-      if (!wrapperRef.current) return;
+      if (!wrapperRef.current || !pdfPage) return;
       
       const wrapperRect = wrapperRef.current.getBoundingClientRect();
       const viewport = pdfPage.getViewport({ scale: 1 });
@@ -182,7 +137,6 @@ export function PDFAnnotationPage({
       }
     };
 
-    updateGeometry();
     const viewport = wrapperRef.current.closest('.pdf-viewer-viewport');
     viewport?.addEventListener('scroll', updateGeometry);
     window.addEventListener('resize', updateGeometry);

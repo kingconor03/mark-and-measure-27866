@@ -649,17 +649,17 @@ export default function MarkupCanvas({
         .select()
         .single()
         .then(({ data, error }) => {
-          if (error) throw error;
+          if (error) {
+            logger.error("Error adding pile:", error);
+            onPilesUpdate(pilesRef.current.filter(p => p.id !== tempId));
+            onPileNumberUpdate(pileConfig.nextPileNumber);
+            toast.error("Failed to add pile");
+            return;
+          }
           
           // Replace temp pile with real pile
           onPilesUpdate(pilesRef.current.map(p => p.id === tempId ? data : p));
           onHistoryAdd({ type: 'ADD_PILE', pile: data });
-        })
-        .catch((error) => {
-          logger.error("Error adding pile:", error);
-          onPilesUpdate(pilesRef.current.filter(p => p.id !== tempId));
-          onPileNumberUpdate(pileConfig.nextPileNumber);
-          toast.error("Failed to add pile");
         });
     }
     

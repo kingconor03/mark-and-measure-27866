@@ -183,8 +183,8 @@ export default function MarkupCanvas({
   
   // Get current page and filter markups for current page
   const currentPage = pages[currentPageIndex];
-  const currentPagePiles = piles.filter(p => p.page_id === currentPage?.id);
-  const currentPageFootings = footings.filter(f => f.page_id === currentPage?.id);
+  const currentPagePiles = useMemo(() => piles.filter(p => p.page_id === currentPage?.id), [piles, currentPage?.id]);
+  const currentPageFootings = useMemo(() => footings.filter(f => f.page_id === currentPage?.id), [footings, currentPage?.id]);
   
   // ============================================================================
   // ANNOTATION CONVERSION
@@ -857,64 +857,63 @@ export default function MarkupCanvas({
   const pendingZoomRef = useRef<number | null>(null);
   
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (!viewportRef.current || !currentPdfPage) return;
+    // Only handle zoom when Ctrl/Cmd is held, otherwise allow normal scrolling
+    if (!viewportRef.current || !currentPdfPage || !(e.ctrlKey || e.metaKey)) return;
     
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      const viewport = viewportRef.current;
-      const delta = e.deltaY;
-      
-      // Get mouse position relative to viewport
-      const rect = viewport.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      
-      // Get current scroll position
-      const scrollX = viewport.scrollLeft;
-      const scrollY = viewport.scrollTop;
-      
-      // Calculate zoom factor (smaller increments for smoother zoom)
-      const zoomFactor = delta < 0 ? 1.05 : 0.95;
-      const newZoom = Math.max(0.25, Math.min(3, (pendingZoomRef.current || zoom) * zoomFactor));
-      pendingZoomRef.current = newZoom;
-      
-      // Calculate the point under the mouse in page coordinates
-      const pageX = (scrollX + mouseX) / (pendingZoomRef.current || zoom);
-      const pageY = (scrollY + mouseY) / (pendingZoomRef.current || zoom);
-      
-      // Clear any pending zoom updates
-      if (zoomTimeoutRef.current) {
-        clearTimeout(zoomTimeoutRef.current);
-      }
-      
-      // Debounce zoom state update to prevent flashing (but update scroll immediately)
-      zoomTimeoutRef.current = setTimeout(() => {
-        if (pendingZoomRef.current !== null && viewportRef.current) {
-          const finalZoom = pendingZoomRef.current;
-          setZoom(finalZoom);
-          
-          // Adjust scroll to keep the same point under the mouse
-          requestAnimationFrame(() => {
-            if (viewportRef.current) {
-              viewportRef.current.scrollLeft = pageX * finalZoom - mouseX;
-              viewportRef.current.scrollTop = pageY * finalZoom - mouseY;
-              
-              // Dispatch transform change event for FloatingProjectSummary
-              window.dispatchEvent(new CustomEvent('canvas-transform-change', {
-                detail: {
-                  zoom: finalZoom,
-                  viewportTransform: [finalZoom, 0, 0, finalZoom, viewportRef.current.scrollLeft, viewportRef.current.scrollTop]
-                }
-              }));
-            }
-          });
-          
-          pendingZoomRef.current = null;
-        }
-      }, 50); // Small delay to batch rapid zoom events
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const viewport = viewportRef.current;
+    const delta = e.deltaY;
+    
+    // Get mouse position relative to viewport
+    const rect = viewport.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Get current scroll position
+    const scrollX = viewport.scrollLeft;
+    const scrollY = viewport.scrollTop;
+    
+    // Calculate zoom factor (smaller increments for smoother zoom)
+    const zoomFactor = delta < 0 ? 1.05 : 0.95;
+    const newZoom = Math.max(0.25, Math.min(3, (pendingZoomRef.current || zoom) * zoomFactor));
+    pendingZoomRef.current = newZoom;
+    
+    // Calculate the point under the mouse in page coordinates
+    const pageX = (scrollX + mouseX) / (pendingZoomRef.current || zoom);
+    const pageY = (scrollY + mouseY) / (pendingZoomRef.current || zoom);
+    
+    // Clear any pending zoom updates
+    if (zoomTimeoutRef.current) {
+      clearTimeout(zoomTimeoutRef.current);
     }
+    
+    // Debounce zoom state update to prevent flashing (but update scroll immediately)
+    zoomTimeoutRef.current = setTimeout(() => {
+      if (pendingZoomRef.current !== null && viewportRef.current) {
+        const finalZoom = pendingZoomRef.current;
+        setZoom(finalZoom);
+        
+        // Adjust scroll to keep the same point under the mouse
+        requestAnimationFrame(() => {
+          if (viewportRef.current) {
+            viewportRef.current.scrollLeft = pageX * finalZoom - mouseX;
+            viewportRef.current.scrollTop = pageY * finalZoom - mouseY;
+            
+            // Dispatch transform change event for FloatingProjectSummary
+            window.dispatchEvent(new CustomEvent('canvas-transform-change', {
+              detail: {
+                zoom: finalZoom,
+                viewportTransform: [finalZoom, 0, 0, finalZoom, viewportRef.current.scrollLeft, viewportRef.current.scrollTop]
+              }
+            }));
+          }
+        });
+        
+        pendingZoomRef.current = null;
+      }
+    }, 16); // Reduced delay for more responsive zoom
   }, [zoom, currentPdfPage]);
   
   // ============================================================================
@@ -1372,13 +1371,13 @@ export default function MarkupCanvas({
           handlePanEnd();
         }
       }}
-      onWheel={handleWheel}
       onContextMenu={(e) => e.preventDefault()}
     >
       <div 
         ref={viewportRef} 
         className="pdf-viewer-viewport w-full h-full"
         onClick={handleContainerClick}
+        onWheel={handleWheel}
       >
         <div 
           className="pdf-viewer-container" 

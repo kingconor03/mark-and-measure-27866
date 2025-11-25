@@ -200,17 +200,12 @@ export default function MarkupCanvas({
   // - This ensures annotations stay aligned during zoom/pan
   //
   const annotations = useMemo(() => {
-    if (!currentPdfPage) {
-      console.log('⚠️ No currentPdfPage, returning empty annotations');
-      return [];
-    }
+    if (!currentPdfPage) return [];
     
     // Get PDF page viewport at scale 1 (natural size) for coordinate conversion
     const viewport = currentPdfPage.getViewport({ scale: 1 });
     const pageIndex = currentPageIndex;
     const result: Annotation[] = [];
-    
-    console.log(`📊 Converting annotations: ${currentPagePiles.length} piles, ${currentPageFootings.length} footings`);
     
     // Convert piles to annotations
     currentPagePiles.forEach((pile) => {
@@ -299,7 +294,6 @@ export default function MarkupCanvas({
       });
     });
     
-    console.log(`✅ Created ${result.length} annotations`);
     return result;
   }, [currentPagePiles, currentPageFootings, currentPageIndex, currentPdfPage]);
   
@@ -489,9 +483,20 @@ export default function MarkupCanvas({
     loadPDF();
   }, [currentPage?.id, currentPage?.project_id, currentPage?.page_number, session]);
   
-  // Handle page geometry updates from PDFAnnotationPage
+  // Handle page geometry updates from PDFAnnotationPage (memoized to prevent re-renders)
   const handlePageGeometryUpdate = useCallback((geo: PageGeometry) => {
-    setPageGeometry(geo);
+    setPageGeometry(prev => {
+      // Only update if geometry actually changed
+      if (prev && 
+          prev.pageWidth === geo.pageWidth && 
+          prev.pageHeight === geo.pageHeight &&
+          prev.zoom === geo.zoom &&
+          Math.abs(prev.pageOffsetX - geo.pageOffsetX) < 1 &&
+          Math.abs(prev.pageOffsetY - geo.pageOffsetY) < 1) {
+        return prev;
+      }
+      return geo;
+    });
   }, []);
   
   // Constrain viewport scrolling to page boundaries

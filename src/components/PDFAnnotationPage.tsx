@@ -35,7 +35,7 @@
  * - Handles all PDF rendering and annotation positioning logic
  */
 
-import { useEffect, useRef, useState, memo } from "react";
+import { useEffect, useRef, useState, memo, useCallback } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import { Annotation } from "@/lib/annotations";
 import { PageGeometry } from "@/utils/coordinateUtils";
@@ -61,57 +61,130 @@ export const PDFAnnotationPage = memo(function PDFAnnotationPage({
 }: PDFAnnotationPageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const canvasScaleWrapperRef = useRef<HTMLDivElement>(null);
   const [pageGeometry, setPageGeometry] = useState<PageGeometry | null>(null);
+  
+  // Track the zoom level at which the canvas was last rendered
+  const renderedZoomRef = useRef<number>(zoom);
+  const renderTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isRenderingRef = useRef(false);
 
-  // Render the PDF page
+  // Actual PDF rendering function
+  const renderPDF = useCallback(async (targetZoom: number) => {
+    if (!canvasRef.current || !pdfPage || isRenderingRef.current) return;
+
+    isRenderingRef.current = true;
+    
+    try {
+      const viewport = pdfPage.getViewport({ scale: targetZoom });
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const context = canvas.getContext("2d");
+      if (!context) return;
+
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      await pdfPage.render({
+        canvasContext: context,
+        viewport: viewport,
+      }).promise;
+
+      // Reset scale wrapper after render is complete
+      if (canvasScaleWrapperRef.current) {
+        canvasScaleWrapperRef.current.style.transform = 'scale(1)';
+        canvasScaleWrapperRef.current.style.transformOrigin = 'top left';
+      }
+
+      // Mark this zoom as rendered
+      renderedZoomRef.current = targetZoom;
+
+      // Update page geometry after rendering
+      if (wrapperRef.current) {
+        const wrapperRect = wrapperRef.current.getBoundingClientRect();
+        const viewport = pdfPage.getViewport({ scale: 1 }); // Natural size
+        const viewportElement = wrapperRef.current.closest('.pdf-viewer-viewport') as HTMLElement;
+        
+        const geo = {
+          pageWidth: viewport.width,
+          pageHeight: viewport.height,
+          zoom: targetZoom,
+          pageOffsetX: viewportElement 
+            ? wrapperRect.left - viewportElement.getBoundingClientRect().left + viewportElement.scrollLeft
+            : wrapperRect.left,
+          pageOffsetY: viewportElement
+            ? wrapperRect.top - viewportElement.getBoundingClientRect().top + viewportElement.scrollTop
+            : wrapperRect.top,
+        };
+        
+        setPageGeometry(geo);
+        onPageGeometryUpdate?.(geo);
+      }
+    } catch (error) {
+      console.error(`Error rendering PDF page ${pageNumber}:`, error);
+    } finally {
+      isRenderingRef.current = false;
+    }
+  }, [pdfPage, pageNumber, onPageGeometryUpdate]);
+
+  // Handle zoom changes with CSS scaling during zoom and debounced re-render
   useEffect(() => {
-    if (!canvasRef.current || !pdfPage) return;
+    if (!pdfPage) return;
 
-    const render = async () => {
-      try {
-        const viewport = pdfPage.getViewport({ scale: zoom });
-        const canvas = canvasRef.current;
-        if (!canvas) return;
+    // If this is the initial render, render immediately
+    if (renderedZoomRef.current === zoom && !canvasRef.current?.width) {
+      renderPDF(zoom);
+      return;
+    }
 
-        const context = canvas.getContext("2d");
-        if (!context) return;
+    // Calculate scale factor from rendered zoom to current zoom
+    const scaleFactor = zoom / renderedZoomRef.current;
 
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+    // Apply CSS transform for instant visual feedback
+    if (canvasScaleWrapperRef.current && scaleFactor !== 1) {
+      canvasScaleWrapperRef.current.style.transform = `scale(${scaleFactor})`;
+      canvasScaleWrapperRef.current.style.transformOrigin = 'top left';
+    }
 
-        await pdfPage.render({
-          canvasContext: context,
-          viewport: viewport,
-        }).promise;
+    // Update geometry immediately with current zoom (for overlay alignment)
+    if (wrapperRef.current) {
+      const wrapperRect = wrapperRef.current.getBoundingClientRect();
+      const viewport = pdfPage.getViewport({ scale: 1 });
+      const viewportElement = wrapperRef.current.closest('.pdf-viewer-viewport') as HTMLElement;
+      
+      const geo = {
+        pageWidth: viewport.width,
+        pageHeight: viewport.height,
+        zoom,
+        pageOffsetX: viewportElement 
+          ? wrapperRect.left - viewportElement.getBoundingClientRect().left + viewportElement.scrollLeft
+          : wrapperRect.left,
+        pageOffsetY: viewportElement
+          ? wrapperRect.top - viewportElement.getBoundingClientRect().top + viewportElement.scrollTop
+          : wrapperRect.top,
+      };
+      
+      setPageGeometry(geo);
+      onPageGeometryUpdate?.(geo);
+    }
 
-        // Update page geometry after rendering
-        if (wrapperRef.current) {
-          const wrapperRect = wrapperRef.current.getBoundingClientRect();
-          const viewport = pdfPage.getViewport({ scale: 1 }); // Natural size
-          const viewportElement = wrapperRef.current.closest('.pdf-viewer-viewport') as HTMLElement;
-          
-          const geo = {
-            pageWidth: viewport.width,
-            pageHeight: viewport.height,
-            zoom,
-            pageOffsetX: viewportElement 
-              ? wrapperRect.left - viewportElement.getBoundingClientRect().left + viewportElement.scrollLeft
-              : wrapperRect.left,
-            pageOffsetY: viewportElement
-              ? wrapperRect.top - viewportElement.getBoundingClientRect().top + viewportElement.scrollTop
-              : wrapperRect.top,
-          };
-          
-          setPageGeometry(geo);
-          onPageGeometryUpdate?.(geo);
-        }
-      } catch (error) {
-        console.error(`Error rendering PDF page ${pageNumber}:`, error);
+    // Clear any existing render timer
+    if (renderTimerRef.current) {
+      clearTimeout(renderTimerRef.current);
+    }
+
+    // Schedule high-quality re-render after zoom stops (300ms delay)
+    renderTimerRef.current = setTimeout(() => {
+      renderPDF(zoom);
+    }, 300);
+
+    return () => {
+      if (renderTimerRef.current) {
+        clearTimeout(renderTimerRef.current);
       }
     };
-
-    render();
-  }, [pdfPage, zoom, pageNumber, onPageGeometryUpdate]);
+  }, [pdfPage, zoom, renderPDF, onPageGeometryUpdate]);
   
   // Update page geometry on scroll/resize only (zoom updates are handled in the render effect above)
   useEffect(() => {
@@ -158,7 +231,10 @@ export const PDFAnnotationPage = memo(function PDFAnnotationPage({
       data-page-number={pageNumber}
       style={{ position: 'relative' }}
     >
-      <canvas ref={canvasRef} />
+      {/* Wrapper for CSS scaling during zoom */}
+      <div ref={canvasScaleWrapperRef} style={{ transformOrigin: 'top left' }}>
+        <canvas ref={canvasRef} />
+      </div>
       
       {/* Annotation overlay layer */}
       {pageGeometry && (

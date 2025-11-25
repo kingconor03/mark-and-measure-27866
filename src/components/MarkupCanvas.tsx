@@ -857,6 +857,7 @@ export default function MarkupCanvas({
   // - Debounced to prevent flashing during rapid scroll
   // - Uses requestAnimationFrame for smooth scroll adjustments
   // - Dispatches transform events for FloatingProjectSummary
+  // - Uses native event listener to prevent browser zoom
   // 
   const zoomTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingZoomRef = useRef<number | null>(null);
@@ -920,6 +921,27 @@ export default function MarkupCanvas({
       }
     }, 16); // Reduced delay for more responsive zoom
   }, [zoom, currentPdfPage]);
+  
+  // Add native wheel event listener to prevent browser zoom
+  // This must be a native listener with passive: false to preventDefault synchronously
+  useEffect(() => {
+    const viewportElement = viewportRef.current;
+    if (!viewportElement) return;
+    
+    const handleNativeWheel = (e: WheelEvent) => {
+      // Prevent browser zoom when Ctrl/Cmd is held
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+      }
+    };
+    
+    // Add listener with passive: false to allow preventDefault
+    viewportElement.addEventListener('wheel', handleNativeWheel, { passive: false });
+    
+    return () => {
+      viewportElement.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, []);
   
   // ============================================================================
   // ANNOTATION INTERACTION HANDLERS
